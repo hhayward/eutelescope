@@ -110,17 +110,17 @@ void EUTelPatRecTriplets::testUserInput() {
 
 void EUTelPatRecTriplets::createTriplets()
 {
-    _tripletsVec.clear();
-    float omega = -1.0/_beamE;
-	const gear::BField& Bfield = geo::gGeometry().getMagneticField();
-	gear::Vector3D vectorGlobal(0.1,0.1,0.1);
-	const double Bx = (Bfield.at( vectorGlobal ).x());  
-	const double By = (Bfield.at( vectorGlobal ).y());
-	const double Bz = (Bfield.at( vectorGlobal ).z());
-    double curvX = 0.0003*Bx*omega; 
-    double curvY = 0.0003*By*omega; 
-    std::vector<unsigned int > cenPlane(1,4);
-
+  _tripletsVec.clear();
+  float omega = -1.0/_beamE;
+  const gear::BField& Bfield = geo::gGeometry().getMagneticField();
+  gear::Vector3D vectorGlobal(0.1,0.1,0.1);
+  const double Bx = (Bfield.at( vectorGlobal ).x());  
+  const double By = (Bfield.at( vectorGlobal ).y());
+  const double Bz = (Bfield.at( vectorGlobal ).z());
+  double curvX = 0.0003*Bx*omega; 
+  double curvY = 0.0003*By*omega; 
+  std::vector<unsigned int > cenPlane(1,4);
+  
     for(std::vector<unsigned int>::iterator cenPlaneID = cenPlane.begin(); cenPlaneID != cenPlane.end(); ++cenPlaneID) {
         unsigned int cenID = *cenPlaneID; 
         EVENT::TrackerHitVec& hitCentre = _mapHitsVecPerPlane[cenID];
