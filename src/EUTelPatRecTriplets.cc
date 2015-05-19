@@ -120,7 +120,7 @@ void EUTelPatRecTriplets::createTriplets()
   double curvX = 0.0003*Bx*omega; 
   double curvY = 0.0003*By*omega; 
   std::vector<unsigned int > cenPlane(1,4);
-  
+  streamlog_out(DEBUG0) << "Lookinig for doublets around planes 1 and 4" << std::endl;
     for(std::vector<unsigned int>::iterator cenPlaneID = cenPlane.begin(); cenPlaneID != cenPlane.end(); ++cenPlaneID) {
         unsigned int cenID = *cenPlaneID; 
         EVENT::TrackerHitVec& hitCentre = _mapHitsVecPerPlane[cenID];
@@ -135,18 +135,25 @@ void EUTelPatRecTriplets::createTriplets()
             double hitLeftPos[] = { (*itHitLeft)->getPosition()[0], (*itHitLeft)->getPosition()[1], (*itHitLeft)->getPosition()[2] };
             double hitLeftPosGlobal[3];
             geo::gGeometry().local2Master(hitLeftLoc ,hitLeftPos,hitLeftPosGlobal);
+	    streamlog_out(DEBUG0) << "hitLeftPosGlobal = " <<hitLeftPosGlobal[0]<<","<<hitLeftPosGlobal[1]<<","<<hitLeftPosGlobal[2]<<"," <<std::endl;
             for ( itHitRight = hitCentreRight.begin(); itHitRight != hitCentreRight.end(); ++itHitRight ) {
                 const int hitRightLoc = Utility::getSensorIDfromHit( static_cast<IMPL::TrackerHitImpl*> (*itHitRight) );
                 double hitRightPos[] = { (*itHitRight)->getPosition()[0], (*itHitRight)->getPosition()[1], (*itHitRight)->getPosition()[2] };
                 double hitRightPosGlobal[3];
                 geo::gGeometry().local2Master(hitRightLoc ,hitRightPos,hitRightPosGlobal);
+		streamlog_out(DEBUG0) << "hitRightPosGlobal = " <<hitRightPosGlobal[0]<<","<<hitRightPosGlobal[1]<<","<<hitRightPosGlobal[2]<<"," <<std::endl;
                 doublets doublet;
-                doublet = getDoublet(hitLeftPosGlobal,hitRightPosGlobal,curvX,curvY);
+                doublet = getDoublet(hitLeftPosGlobal,hitRightPosGlobal,curvX,curvY);streamlog_out(DEBUG0) << "doublet returned"<<std::endl;
+		streamlog_out(DEBUG0) <<"_doubletDistCut.at(0) = "<<_doubletDistCut.at(0)<<", _doubletDistCut.at(1) = "<<_doubletDistCut.at(1)<<std::endl;
                 if(abs(doublet.diff.at(0)) >  _doubletDistCut.at(0) or abs(doublet.diff.at(1)) >  _doubletDistCut.at(1) ){
-                    continue;
+		  streamlog_out(DEBUG0) << "doublet rejected, abs(doublet.diff.at(0)) = "<<abs(doublet.diff.at(0))<< "> "<<_doubletDistCut.at(0)<<"or , abs(doublet.diff.at(1)) = "<<abs(doublet.diff.at(1))<<">"<<_doubletDistCut.at(1)<<  std::endl;
+		    continue;
                 }
+		streamlog_out(DEBUG0) << "doubletaccepted, abs(doublet.diff.at(0)) = "<<abs(doublet.diff.at(0))<< "< "<<_doubletDistCut.at(0)<<"and , abs(doublet.diff.at(1)) = "<<abs(doublet.diff.at(1))<<"<"<<_doubletDistCut.at(1)<<  std::endl;
+		streamlog_out(DEBUG0) <<"Now loop through all hits on plane between two hits which create doublets. "<<std::endl;
                 //Now loop through all hits on plane between two hits which create doublets. 
                 for ( itHit = hitCentre.begin(); itHit != hitCentre.end(); ++itHit ) {
+		  streamlog_out(DEBUG0) <<"looking for those middle hits now..."<<std::endl;
                     const int hitLoc = Utility::getSensorIDfromHit( static_cast<IMPL::TrackerHitImpl*> (*itHit) );
                     double hitPos[] = { (*itHit)->getPosition()[0], (*itHit)->getPosition()[1], (*itHit)->getPosition()[2] };
                     double hitPosGlobal[3];
@@ -156,9 +163,14 @@ void EUTelPatRecTriplets::createTriplets()
                     float y1 = hitPos[1] - 0.5*curvY*pow(hitPos[2] - initDis, 2);
                     double delX = doublet.pos.at(0) - x1;
                     double delY = doublet.pos.at(1) - y1;
+		    streamlog_out(DEBUG0) <<"applying doubletCenDistCut now..."<<std::endl;
                     if(abs(delX) >  _doubletCenDistCut.at(0) or abs(delY) >  _doubletCenDistCut.at(1) ){
-                        continue;
+                      streamlog_out(DEBUG0) <<"failed cut: abs(delX) = "<<abs(delX)<<", _doubletCenDistCut.at(0) = "<<_doubletCenDistCut.at(0)<<", abs(delY) = "<<abs(delY)<<", _doubletCenDistCut.at(1) = "<<_doubletCenDistCut.at(1)<<std::endl;  
+		      continue;
                     }
+		    streamlog_out(DEBUG0) <<"abs(delX) = "<<abs(delX)<<", _doubletCenDistCut.at(0) = "<<_doubletCenDistCut.at(0)<<", abs(delY) = "<<abs(delY)<<", _doubletCenDistCut.at(1) = "<<_doubletCenDistCut.at(1)<<std::endl;  
+		    
+		    streamlog_out(DEBUG0) <<"creating triplet  now..."<<std::endl;
                     triplets triplet;
                     triplet.hits.push_back(EUTelHit(*itHitLeft));
                     triplet.hits.push_back(EUTelHit(*itHit));
@@ -169,6 +181,7 @@ void EUTelPatRecTriplets::createTriplets()
                     triplet.cenPlane = cenID;
                     triplet.slope.push_back(doublet.slope.at(0));
                     triplet.slope.push_back(doublet.slope.at(1));
+		    streamlog_out(DEBUG0) <<"push_back triplet  now..."<<std::endl;
                     _tripletsVec.push_back(triplet); 
                 }
             }
@@ -242,7 +255,7 @@ EUTelPatRecTriplets::doublets EUTelPatRecTriplets::getDoublet(double hitLeftPos[
 
     doublet.slope.push_back( doublet.diff.at(0)/doublet.diff.at(2)); 
     doublet.diff.push_back( doublet.diff.at(1)/doublet.diff.at(2)); 
-
+    streamlog_out(DEBUG0) <<"doublet created"<<std::endl;
     return doublet;
 }
 

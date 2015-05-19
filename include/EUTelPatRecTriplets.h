@@ -117,7 +117,7 @@ namespace eutelescope {
 			this->_tripletConnectDistCut = cuts;
 		}
 		inline void setDoubletCenDistCut(std::vector<float> cuts) {
-			this->_tripletConnectDistCut = cuts;
+			this->_doubletCenDistCut = cuts;
 		}
 
 		inline void setBeamMomentum(double beam) {

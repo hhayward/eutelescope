@@ -129,10 +129,10 @@ namespace eutelescope {
 		/** Track fitter*/
 		EUTelPatRecTriplets* _trackFitter;
 
-        std::vector<float> _doubletDistCut;
-        std::vector<float> _tripletSlopeCuts;
-        std::vector<float> _tripletConnectDistCut;
-        std::vector<float> _doubletCenDistCut;
+		std::vector<float> _doubletDistCut;
+		std::vector<float> _tripletSlopeCuts;
+		std::vector<float> _tripletConnectDistCut;
+		std::vector<float> _doubletCenDistCut;
 
 		/** Maximal amount of missing hits per track candidate */
 		/** Number of events processed */
