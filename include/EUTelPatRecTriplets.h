@@ -48,14 +48,28 @@ namespace eutelescope {
         std::vector<float> slope;
         std::vector<float> diff;
     }; 
+    struct triplets {
+        unsigned cenPlane;
+        std::vector<float> pos;
+        std::vector<float> slope;
+        std::vector<float> diff;
+        std::vector<EUTelHit> hits;
+    }; 
 
 	private:
 		DISALLOW_COPY_AND_ASSIGN(EUTelPatRecTriplets) // prevent users from making (default) copies of processors
 	public:
 		EUTelPatRecTriplets();
 		~EUTelPatRecTriplets();
-		//GETTERS
-		std::vector<EUTelTrack> getTracks();
+
+        //doublet distance cut
+        std::vector<float> _doubletDistCut;
+        std::vector<float> _doubletCenDistCut;
+        std::vector<float> _tripletConnectDistCut;
+
+		void createTriplets();
+        std::vector<EUTelTrack> getTracks( );
+
 
 		inline int getEventNumber()	const {
 			return _eventNumber;
@@ -79,6 +93,7 @@ namespace eutelescope {
 		inline int getNumberOfTracksAfterPruneCut(){
 			return _numberOfTracksAfterPruneCut;
 		}
+        std::vector<float>  getTripPosAtZ(triplets trip, float posZ );
 
 		//SETTERS
 		void setHitsVecPerPlane();
@@ -90,16 +105,19 @@ namespace eutelescope {
 		void setEventNumber(int eventNumber){
 			_eventNumber = eventNumber;
 		}
-		inline void setAllowedSharedHitsOnTrackCandidate( int AllowedSharedHitsOnTrackCandidate){
-			this->_AllowedSharedHitsOnTrackCandidate = AllowedSharedHitsOnTrackCandidate;
+		inline void setTripletSlopeCuts(std::vector<float> cuts ){
+			this->_tripletSlopeCuts = cuts;
 		};
 
-		inline void setAllowedMissingHits(unsigned int allowedMissingHits) {
-			this->_allowedMissingHits = allowedMissingHits;
+		inline void setDoubletDistCut(std::vector<float> cuts) {
+			this->_doubletDistCut = cuts;
 		}
 
-		inline void setWindowSize(double window) {
-			this->_residualsRMax = window;
+		inline void setTripletConnectDistCut(std::vector<float> cuts) {
+			this->_tripletConnectDistCut = cuts;
+		}
+		inline void setDoubletCenDistCut(std::vector<float> cuts) {
+			this->_tripletConnectDistCut = cuts;
 		}
 
 		inline void setBeamMomentum(double beam) {
@@ -133,8 +151,7 @@ namespace eutelescope {
 		void testHitsVecPerPlane();
 		void testPositionEstimation(float position1[], float position2[]);
 		void findTracksWithEnoughHits();
-		void findTrackCandidatesWithSameHitsAndRemove();
-	    doublets getDoublet( double hitLeftPos[3], double hitRightPos[3] );
+	    doublets getDoublet( double hitLeftPos[3], double hitRightPos[3],double curvX,double curvY );
 		void testTrackQuality();
 		void clearTrackAndTrackStates();
 		void clearFinalTracks();
@@ -146,6 +163,8 @@ namespace eutelescope {
 		bool _firstExecution;
 		EVENT::IntVec _createSeedsFromPlanes;
 		EVENT::FloatVec _excludePlanes;         
+        std::vector<triplets> _tripletsVec;
+
 		std::vector<EUTelTrack> _tracks;
 		std::vector<EUTelTrack> _tracksAfterEnoughHitsCut;
 		std::vector<EUTelTrack>	_finalTracks;
@@ -205,8 +224,8 @@ private:
 
 		/** Maximum number of missing on a track candidate */
 		int _allowedMissingHits;
-		/**Allowed # of common hits on a track for a single event.*/
-		int _AllowedSharedHitsOnTrackCandidate;
+
+        std::vector<float> _tripletSlopeCuts;
 
 		/** Maximum number of track candidates to be stored */
 		int _maxTrackCandidates;
@@ -225,6 +244,7 @@ private:
 		
 		/** Beam angular spread (horizontal,vertical) [mr] */
 		EVENT::FloatVec _beamAngularSpread;
+
 		
 private:
 /** Track parameters propagation jacobian matrix */

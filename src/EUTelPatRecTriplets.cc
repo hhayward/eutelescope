@@ -11,7 +11,7 @@ _numberOfTracksTotal(0),
 _numberOfTracksAfterHitCut(0),
 _numberOfTracksAfterPruneCut(0),
 _allowedMissingHits(0),
-_AllowedSharedHitsOnTrackCandidate(0),
+_tripletSlopeCuts(0,0),
 _beamE(-1.),
 _beamQ(-1.)
 {}
@@ -87,75 +87,6 @@ void EUTelPatRecTriplets::testPositionEstimation(float position1[], float positi
 	} 
 }
 
-     // Perform track pruning this removes tracks that have the same hits used to create the track on some planes
-		//TO DO: consider a better approach. Since we could remove tracks that have a better residual to hits just because that have came first. For example was will always add the final track in the list. Could this introduce bias? 
-		//TO DO:We compare all states to all other states on a track. We don't need to do that since hits on differents planes must be different.
-void EUTelPatRecTriplets::findTrackCandidatesWithSameHitsAndRemove(){
-	streamlog_out(MESSAGE1) << "EUTelPatRecTriplets::findTrackCandidatesWithSameHitsAndRemove----BEGIN" << std::endl;
-	for(size_t i =0; i < _tracksAfterEnoughHitsCut.size();++i){//LOOP through all tracks 
-		streamlog_out(DEBUG1) <<  "Loop at track number: " <<  i <<". Must loop over " << _tracksAfterEnoughHitsCut.size()<<" tracks in total."   << std::endl;
-		std::vector<EUTelState> iStates = _tracksAfterEnoughHitsCut.at(i).getStates();
-		//Now loop through all tracks one ahead of the original track itTrk. This is done since we want to compare all the track to each other to if they have similar hits     
-		for(size_t j =i+1; j < _tracksAfterEnoughHitsCut.size();++j){ //LOOP over all track again.
-			int hitscount=0;
-			std::vector<EUTelState> jStates = _tracksAfterEnoughHitsCut[j].getStates();
-			for(size_t k=0;k<iStates.size();k++)
-			{
-					EUTelHit ihit;
-					//Need since we could have tracks that have a state but no hits here.
-					if(iStates.at(k).getStateHasHit())
-					{
-							ihit = iStates[k].getHit();
-					}
-					else
-					{
-							continue;
-					}
-					int ic = ihit.getID();
-					
-					for(size_t l=0;l<jStates.size();l++)
-					{
-							EUTelHit jhit;
-							//Need since we could have tracks that have a state but no hits here.
-							if(jStates.at(l).getStateHasHit())
-							{
-									jhit = jStates.at(l).getHit();
-							}
-							else
-							{
-									continue;
-							}
-							int jc = jhit.getID();
-							if(ic == jc )
-							{
-									_totalNumberOfSharedHits++;
-									hitscount++; 
-									streamlog_out(MESSAGE1) <<  "Hit number on track you are comparing all other to: " << i << ". Hit ID: " 
-															<< ic << ". Hit number of comparison: " << j << ". Hit ID of this comparison : " << jc 
-															<< ". Number of common hits: " << hitscount << std::endl; 
-							}
-					}
-
-			} 
-			//If for any track we are comparing to the number of similar hits is to high then we move to the next track and do not add this track to the new list of tracks
-			if(hitscount > _AllowedSharedHitsOnTrackCandidate) {   
-				streamlog_out(DEBUG1)<<"Tracks has too many similar hits remove "<<std::endl;
-				break;
-			}
-			if(j == (_tracksAfterEnoughHitsCut.size()-1)){//If we have loop through all and not breaked then track must be good.
-				_finalTracks.push_back(_tracksAfterEnoughHitsCut[i]);
-				streamlog_out(DEBUG1)<<"Track made prune tracks cut"<<std::endl;
-			}
-		}
-		//We need to add the last track here since the inner loop j+1 will never be entered. We always add the last track since if it has similar hits to past tracks then those tracks have been removed.
-		if(i == (_tracksAfterEnoughHitsCut.size()-1)){//If we have loop through all and not breaked then track must be good.
-		_finalTracks.push_back(_tracksAfterEnoughHitsCut[i]);
-	//	streamlog_out(DEBUG1)<<"Track made prune tracks cut"<<std::endl;
-		}
-
-	}
-	streamlog_out(MESSAGE1) << "------------------------------EUTelPatRecTriplets::findTrackCandidatesWithSameHitsAndRemove()---------------------------------END" << std::endl;
-}
 //This function is used to check that the input data is as expect. If not then we end the processor by throwing a exception.
 ////TO DO: should check if seed planes are also excluded	
 void EUTelPatRecTriplets::testUserInput() {
@@ -177,16 +108,26 @@ void EUTelPatRecTriplets::testUserInput() {
 	}
 }	
 
-std::vector<EUTelTrack> EUTelPatRecTriplets::getTracks()
+void EUTelPatRecTriplets::createTriplets()
 {
-
+    _tripletsVec.clear();
+    float omega = -1.0/_beamE;
+	const gear::BField& Bfield = geo::gGeometry().getMagneticField();
+	gear::Vector3D vectorGlobal(0.1,0.1,0.1);
+	const double Bx = (Bfield.at( vectorGlobal ).x());  
+	const double By = (Bfield.at( vectorGlobal ).y());
+	const double Bz = (Bfield.at( vectorGlobal ).z());
+    double curvX = 0.0003*Bx*omega; 
+    double curvY = 0.0003*By*omega; 
     std::vector<unsigned int > cenPlane(1,4);
 
     for(std::vector<unsigned int>::iterator cenPlaneID = cenPlane.begin(); cenPlaneID != cenPlane.end(); ++cenPlaneID) {
         unsigned int cenID = *cenPlaneID; 
+        EVENT::TrackerHitVec& hitCentre = _mapHitsVecPerPlane[cenID];
         EVENT::TrackerHitVec& hitCentreLeft = _mapHitsVecPerPlane[cenID - 1];
         EVENT::TrackerHitVec& hitCentreRight = _mapHitsVecPerPlane[cenID + 1];
 
+		EVENT::TrackerHitVec::iterator itHit;
 		EVENT::TrackerHitVec::iterator itHitLeft;
 		EVENT::TrackerHitVec::iterator itHitRight;
 		for ( itHitLeft = hitCentreLeft.begin(); itHitLeft != hitCentreLeft.end(); ++itHitLeft ) {
@@ -200,61 +141,89 @@ std::vector<EUTelTrack> EUTelPatRecTriplets::getTracks()
                 double hitRightPosGlobal[3];
                 geo::gGeometry().local2Master(hitRightLoc ,hitRightPos,hitRightPosGlobal);
                 doublets doublet;
-                doublet = getDoublet(hitLeftPosGlobal,hitRightPosGlobal);
+                doublet = getDoublet(hitLeftPosGlobal,hitRightPosGlobal,curvX,curvY);
+                if(abs(doublet.diff.at(0)) >  _doubletDistCut.at(0) or abs(doublet.diff.at(1)) >  _doubletDistCut.at(1) ){
+                    continue;
+                }
+                //Now loop through all hits on plane between two hits which create doublets. 
+                for ( itHit = hitCentre.begin(); itHit != hitCentre.end(); ++itHit ) {
+                    const int hitLoc = Utility::getSensorIDfromHit( static_cast<IMPL::TrackerHitImpl*> (*itHit) );
+                    double hitPos[] = { (*itHit)->getPosition()[0], (*itHit)->getPosition()[1], (*itHit)->getPosition()[2] };
+                    double hitPosGlobal[3];
+                    geo::gGeometry().local2Master(hitLoc ,hitPos,hitPosGlobal);
+                    float initDis = geo::gGeometry().getInitialDisplacementToFirstPlane();
+                    float x1 = hitPos[0] - 0.5*curvX*pow(hitPos[2] - initDis, 2);
+                    float y1 = hitPos[1] - 0.5*curvY*pow(hitPos[2] - initDis, 2);
+                    double delX = doublet.pos.at(0) - x1;
+                    double delY = doublet.pos.at(1) - y1;
+                    if(abs(delX) >  _doubletCenDistCut.at(0) or abs(delY) >  _doubletCenDistCut.at(1) ){
+                        continue;
+                    }
+                    triplets triplet;
+                    triplet.hits.push_back(EUTelHit(*itHitLeft));
+                    triplet.hits.push_back(EUTelHit(*itHit));
+                    triplet.hits.push_back(EUTelHit(*itHitRight));
+                    triplet.pos.push_back(doublet.pos.at(0));
+                    triplet.pos.push_back(doublet.pos.at(1));
+                    triplet.pos.push_back(doublet.pos.at(2));
+                    triplet.cenPlane = cenID;
+                    triplet.slope.push_back(doublet.slope.at(0));
+                    triplet.slope.push_back(doublet.slope.at(1));
+                    _tripletsVec.push_back(triplet); 
+                }
             }
         }
-
     }
-	for( size_t iplane = 0; iplane < _createSeedsFromPlanes.size(); iplane++) 
-	{
-		streamlog_out(DEBUG1) << "We are using plane: " <<  _createSeedsFromPlanes[iplane] << " to create seeds" << std::endl;
+}
+std::vector<EUTelTrack> EUTelPatRecTriplets::getTracks( ){
+    std::vector<triplets>::iterator itTriplet;
+    std::vector<triplets> leftTriplets;
+    std::vector<triplets> rightTriplets;
 
-		EVENT::TrackerHitVec& hitFirstLayer = _mapHitsVecPerPlane[_createSeedsFromPlanes[iplane]];
-		streamlog_out(DEBUG1) << "N hits on sensor : " << hitFirstLayer.size() << std::endl;
-		if(hitFirstLayer.size()== 0){
-			continue;
-		}
-		std::vector<EUTelState> stateVec;
-		EVENT::TrackerHitVec::iterator itHit;
-		for ( itHit = hitFirstLayer.begin(); itHit != hitFirstLayer.end(); ++itHit ) {
-			EUTelState state;//Here we create a track state. This is a point on a track that we can give a position,momentum and direction. We combine these to create a track. 
-			double temp[] = { (*itHit)->getPosition()[0], (*itHit)->getPosition()[1], (*itHit)->getPosition()[2] };
-			float posLocal[] = { static_cast<float>(temp[0]), static_cast<float>(temp[1]), static_cast<float>(temp[2]) };
-
-			if( posLocal[2] != 0){//TO DO:This should be in test hits
-				streamlog_out(MESSAGE5) << "The local position of the hit is " << posLocal[0]<<","<< posLocal[1]<<","<< posLocal[2]<<","<<std::endl;
-				throw(lcio::Exception("The position of this local coordinate in the z direction is non 0")); 	
-			}
-			state.setLocation(_createSeedsFromPlanes[iplane]);  
-			state.setPositionLocal(posLocal);  		
-			TVector3 momentum = computeInitialMomentumGlobal(); 
-			state.setLocalMomentumGlobalMomentum(momentum); 
-			state.setHit(*itHit);
-			_totalNumberOfHits++;//This is used for test of the processor later.   
-			state.setDimensionSize(_planeDimensions[state.getLocation()]);
-			stateVec.push_back(state);
-
-		}
-        streamlog_out(DEBUG0) << "States to create tracks from: "<< std::endl;       
-        for(unsigned int i = 0; i<stateVec.size(); i++){
-            stateVec.at(i).print();
+    for(itTriplet = _tripletsVec.begin();itTriplet != _tripletsVec.end();  itTriplet++){
+        if(itTriplet->cenPlane == 1 ){
+            leftTriplets.push_back(*itTriplet);
+        }else if(itTriplet->cenPlane == 4){
+            rightTriplets.push_back(*itTriplet);
+        }else{
+            throw(lcio::Exception( "Triplet are not from the left anre right arms!"  ));
         }
-		_mapSensorIDToSeedStatesVec[_createSeedsFromPlanes[iplane]] = stateVec; 
-	}
+    }
+    std::vector<triplets>::iterator itLeftTriplet;
+    std::vector<triplets>::iterator itRightTriplet;
+    for(itLeftTriplet = leftTriplets.begin();itLeftTriplet != leftTriplets.end();  itLeftTriplet++){
+        for(itRightTriplet = rightTriplets.begin();itRightTriplet != rightTriplets.end();  itRightTriplet++){
+            if(abs(itRightTriplet->slope.at(0) - itLeftTriplet->slope.at(0)) > _tripletSlopeCuts.at(0)  or abs(itRightTriplet->slope.at(1) - itLeftTriplet->slope.at(1)) >_tripletSlopeCuts.at(1)  ){
+                continue;
+            }
+            //Do we have a DUT. We will only add one DUT at the moment this must be updated to add multiple DUTs 
+            if(geo::gGeometry().sensorZOrderToIDWithoutExcludedPlanes().size() - 6 != 0 ){
+            }else{
+                //No DUT use average 
+                float aveZPosTrip = (itLeftTriplet->pos.at(2)+ itRightTriplet->pos.at(2))/2.0;
+                std::vector<float> posLeftAtZ = getTripPosAtZ(*itLeftTriplet,aveZPosTrip); 
+                std::vector<float> posRightAtZ = getTripPosAtZ(*itRightTriplet,aveZPosTrip); 
+                if(abs(posLeftAtZ.at(0)- posRightAtZ.at(0)) > _tripletConnectDistCut.at(0) or abs(posLeftAtZ.at(0)- posRightAtZ.at(0)) > _tripletConnectDistCut.at(0)){
+                    continue;
+                }
+
+            }
+        }
+    }
 
 }
+std::vector<float>  EUTelPatRecTriplets::getTripPosAtZ(triplets trip, float posZ ){
+    float dz = posZ - trip.pos.at(2);
+    float x = trip.pos.at(0) + trip.slope.at(0)*dz;
+    float y = trip.pos.at(1) + trip.slope.at(1)*dz;
+    std::vector<float> position;
+    position.push_back(x);position.push_back(y);position.push_back(posZ);
+    return position;
+}
 
-EUTelPatRecTriplets::doublets EUTelPatRecTriplets::getDoublet(double hitLeftPos[3], double hitRightPos[3] )
+
+EUTelPatRecTriplets::doublets EUTelPatRecTriplets::getDoublet(double hitLeftPos[3], double hitRightPos[3],double curvX,double curvY )
 {
-    float omega = -1.0/_beamE;
-	const gear::BField& Bfield = geo::gGeometry().getMagneticField();
-	gear::Vector3D vectorGlobal(0.1,0.1,0.1);
-	const double Bx = (Bfield.at( vectorGlobal ).x());  
-	const double By = (Bfield.at( vectorGlobal ).y());
-	const double Bz = (Bfield.at( vectorGlobal ).z());
-
-    float curvX = 0.0003*Bx*omega; 
-    float curvY = 0.0003*By*omega; 
     float initDis = geo::gGeometry().getInitialDisplacementToFirstPlane();
     //Remove the curvature as a factor between hits. Therefore only the slope will displace the hit position from plane to plane.
     float x1 = hitLeftPos[0] - 0.5*curvX*pow(hitLeftPos[2] - initDis, 2);
