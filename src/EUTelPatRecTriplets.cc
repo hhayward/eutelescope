@@ -126,7 +126,7 @@ void EUTelPatRecTriplets::createTriplets()
         EVENT::TrackerHitVec& hitCentre = _mapHitsVecPerPlane[cenID];
         EVENT::TrackerHitVec& hitCentreLeft = _mapHitsVecPerPlane[cenID - 1];
         EVENT::TrackerHitVec& hitCentreRight = _mapHitsVecPerPlane[cenID + 1];
-
+	streamlog_out(DEBUG0) << "cenID = "<<cenID<<std::endl;
 		EVENT::TrackerHitVec::iterator itHit;
 		EVENT::TrackerHitVec::iterator itHitLeft;
 		EVENT::TrackerHitVec::iterator itHitRight;
@@ -144,16 +144,16 @@ void EUTelPatRecTriplets::createTriplets()
 		streamlog_out(DEBUG0) << "hitRightPosGlobal = " <<hitRightPosGlobal[0]<<","<<hitRightPosGlobal[1]<<","<<hitRightPosGlobal[2]<<"," <<std::endl;
                 doublets doublet;
                 doublet = getDoublet(hitLeftPosGlobal,hitRightPosGlobal,curvX,curvY);streamlog_out(DEBUG0) << "doublet returned"<<std::endl;
-		streamlog_out(DEBUG0) <<"_doubletDistCut.at(0) = "<<_doubletDistCut.at(0)<<", _doubletDistCut.at(1) = "<<_doubletDistCut.at(1)<<std::endl;
+	
                 if(abs(doublet.diff.at(0)) >  _doubletDistCut.at(0) or abs(doublet.diff.at(1)) >  _doubletDistCut.at(1) ){
 		  streamlog_out(DEBUG0) << "doublet rejected, abs(doublet.diff.at(0)) = "<<abs(doublet.diff.at(0))<< "> "<<_doubletDistCut.at(0)<<"or , abs(doublet.diff.at(1)) = "<<abs(doublet.diff.at(1))<<">"<<_doubletDistCut.at(1)<<  std::endl;
 		    continue;
                 }
 		streamlog_out(DEBUG0) << "doubletaccepted, abs(doublet.diff.at(0)) = "<<abs(doublet.diff.at(0))<< "< "<<_doubletDistCut.at(0)<<"and , abs(doublet.diff.at(1)) = "<<abs(doublet.diff.at(1))<<"<"<<_doubletDistCut.at(1)<<  std::endl;
-		streamlog_out(DEBUG0) <<"Now loop through all hits on plane between two hits which create doublets. "<<std::endl;
+		//streamlog_out(DEBUG0) <<"Now loop through all hits on plane between two hits which create doublets. "<<std::endl;
                 //Now loop through all hits on plane between two hits which create doublets. 
                 for ( itHit = hitCentre.begin(); itHit != hitCentre.end(); ++itHit ) {
-		  streamlog_out(DEBUG0) <<"looking for those middle hits now..."<<std::endl;
+		  //streamlog_out(DEBUG0) <<"looking for those middle hits now..."<<std::endl;
                     const int hitLoc = Utility::getSensorIDfromHit( static_cast<IMPL::TrackerHitImpl*> (*itHit) );
                     double hitPos[] = { (*itHit)->getPosition()[0], (*itHit)->getPosition()[1], (*itHit)->getPosition()[2] };
                     double hitPosGlobal[3];
@@ -163,14 +163,14 @@ void EUTelPatRecTriplets::createTriplets()
                     float y1 = hitPos[1] - 0.5*curvY*pow(hitPos[2] - initDis, 2);
                     double delX = doublet.pos.at(0) - x1;
                     double delY = doublet.pos.at(1) - y1;
-		    streamlog_out(DEBUG0) <<"applying doubletCenDistCut now..."<<std::endl;
+		   
                     if(abs(delX) >  _doubletCenDistCut.at(0) or abs(delY) >  _doubletCenDistCut.at(1) ){
                       streamlog_out(DEBUG0) <<"failed cut: abs(delX) = "<<abs(delX)<<", _doubletCenDistCut.at(0) = "<<_doubletCenDistCut.at(0)<<", abs(delY) = "<<abs(delY)<<", _doubletCenDistCut.at(1) = "<<_doubletCenDistCut.at(1)<<std::endl;  
 		      continue;
                     }
-		    streamlog_out(DEBUG0) <<"abs(delX) = "<<abs(delX)<<", _doubletCenDistCut.at(0) = "<<_doubletCenDistCut.at(0)<<", abs(delY) = "<<abs(delY)<<", _doubletCenDistCut.at(1) = "<<_doubletCenDistCut.at(1)<<std::endl;  
+		    //streamlog_out(DEBUG0) <<"abs(delX) = "<<abs(delX)<<", _doubletCenDistCut.at(0) = "<<_doubletCenDistCut.at(0)<<", abs(delY) = "<<abs(delY)<<", _doubletCenDistCut.at(1) = "<<_doubletCenDistCut.at(1)<<std::endl;  
 		    
-		    streamlog_out(DEBUG0) <<"creating triplet  now..."<<std::endl;
+		    streamlog_out(DEBUG0) <<"creating triplet  now...cenID = "<<cenID<<std::endl;
                     triplets triplet;
                     triplet.hits.push_back(EUTelHit(*itHitLeft));
                     triplet.hits.push_back(EUTelHit(*itHit));
@@ -180,9 +180,14 @@ void EUTelPatRecTriplets::createTriplets()
                     triplet.pos.push_back(doublet.pos.at(2));
                     triplet.cenPlane = cenID;
                     triplet.slope.push_back(doublet.slope.at(0));
-                    triplet.slope.push_back(doublet.slope.at(1));
-		    streamlog_out(DEBUG0) <<"push_back triplet  now..."<<std::endl;
-                    _tripletsVec.push_back(triplet); 
+		    //streamlog_out(DEBUG0) <<"doublet.slope.at(0) = "<<doublet.slope.at(0)<<std::endl;
+		    
+                    if(doublet.slope.size()>1){
+		      //streamlog_out(DEBUG0) <<"doublet.slope.at(1) = "<<doublet.slope.at(1)<<std::endl;
+		      triplet.slope.push_back(doublet.slope.at(1));
+		    }
+		    //else {triplet.slope.push_back(doublet.slope.at(0));}		 
+                    _tripletsVec.push_back(triplet);  streamlog_out(DEBUG0) <<"push_back triplet  now..."<<std::endl;
                 }
             }
         }
@@ -192,8 +197,9 @@ std::vector<EUTelTrack> EUTelPatRecTriplets::getTracks( ){
     std::vector<triplets>::iterator itTriplet;
     std::vector<triplets> leftTriplets;
     std::vector<triplets> rightTriplets;
-
+    streamlog_out(DEBUG0) <<"... now lets make sone tracks,  _tripletsVec.size() =  "<<_tripletsVec.size()<<std::endl;
     for(itTriplet = _tripletsVec.begin();itTriplet != _tripletsVec.end();  itTriplet++){
+      streamlog_out(DEBUG0) <<"itTriplet->cenPlane = "<<itTriplet->cenPlane<<std::endl;
         if(itTriplet->cenPlane == 1 ){
             leftTriplets.push_back(*itTriplet);
         }else if(itTriplet->cenPlane == 4){
@@ -202,14 +208,21 @@ std::vector<EUTelTrack> EUTelPatRecTriplets::getTracks( ){
             throw(lcio::Exception( "Triplet are not from the left anre right arms!"  ));
         }
     }
+    streamlog_out(DEBUG0) <<"leftTriplets.size() = "<<leftTriplets.size()<<std::endl;
+    streamlog_out(DEBUG0) <<"rightTriplets.size() = "<<rightTriplets.size()<<std::endl;
+    streamlog_out(DEBUG0) <<"... now lets sort left and right tracks"<<std::endl;
     std::vector<triplets>::iterator itLeftTriplet;
     std::vector<triplets>::iterator itRightTriplet;
     for(itLeftTriplet = leftTriplets.begin();itLeftTriplet != leftTriplets.end();  itLeftTriplet++){
+      streamlog_out(DEBUG0) <<"... now lets sort left and right tracks1"<<std::endl;
         for(itRightTriplet = rightTriplets.begin();itRightTriplet != rightTriplets.end();  itRightTriplet++){
+	  streamlog_out(DEBUG0) <<"... now lets sort left and right tracks2"<<std::endl;
             if(abs(itRightTriplet->slope.at(0) - itLeftTriplet->slope.at(0)) > _tripletSlopeCuts.at(0)  or abs(itRightTriplet->slope.at(1) - itLeftTriplet->slope.at(1)) >_tripletSlopeCuts.at(1)  ){
+	      streamlog_out(DEBUG0) <<"... now lets sort left and right tracks: continuing"<<std::endl;
                 continue;
             }
             //Do we have a DUT. We will only add one DUT at the moment this must be updated to add multiple DUTs 
+	    streamlog_out(DEBUG0) <<"... DO WE HAVE A DUT?"<<std::endl;
             if(geo::gGeometry().sensorZOrderToIDWithoutExcludedPlanes().size() - 6 != 0 ){
             }else{
                 //No DUT use average 

@@ -163,7 +163,7 @@ namespace eutelescope {
 		bool _firstExecution;
 		EVENT::IntVec _createSeedsFromPlanes;
 		EVENT::FloatVec _excludePlanes;         
-        std::vector<triplets> _tripletsVec;
+		std::vector<triplets> _tripletsVec;
 
 		std::vector<EUTelTrack> _tracks;
 		std::vector<EUTelTrack> _tracksAfterEnoughHitsCut;

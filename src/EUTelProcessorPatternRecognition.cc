@@ -206,7 +206,9 @@ void EUTelProcessorPatternRecognition::processEvent(LCEvent* evt)
 		_trackFitter->initialiseSeeds();//Create first states from hits. TO DO: This will not work for strip sensors. Not a big deal since we should not seed from strip sensors.
 		_trackFitter->testInitialSeeds();//Check hits not NULL and size correct
 	// searching for hits along the expected track direction 
+		streamlog_out( DEBUG1 ) << "should have seeds now..." << std::endl;
 		_trackFitter->findTrackCandidates();//Find tracks from seeds. No cuts made here
+		streamlog_out( DEBUG1 ) << "should have tracks now..." << std::endl;
 		_trackFitter->printTrackCandidates();
 //		_trackFitter->testTrackCandidates();//Check that there is most 1 hit per state and each state has a unique hit.
 		_trackFitter->findTracksWithEnoughHits();//This will remove all tracks with hits less than specified by the cut.
