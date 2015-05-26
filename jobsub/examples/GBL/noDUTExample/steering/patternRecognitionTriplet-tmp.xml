@@ -75,6 +75,9 @@ Version: $Id: align-tmp.xml,v 1.3 2009-05-19 18:01:01 bulgheroni Exp $
 	<parameter name="planeDimensions" type="IntVec" > @planeDimensions@ </parameter>
 <parameter name="DoubletDistCut" type="vector<float>" > @DoubletDistCut@ </parameter>
 <parameter name="DoubletCenDistCut" type="vector<float>" > @DoubletCenDistCut@ </parameter>
+<parameter name="TripletSlopeCuts" type="vector<float>" > @TripletSlopeCuts@ </parameter>
+<parameter name="TripletConnectDistCut" type="vector<float>" > @TripletConnectDistCut@ </parameter>
+
 	<parameter name="ExcludePlanes" type="string" lcioOutType="FloatVec"> @excludeplanes@ </parameter>
   <!--verbosity level of this processor ("DEBUG0-4,MESSAGE0-4,WARNING0-4,ERROR0-4,SILENT")-->
  </processor>
