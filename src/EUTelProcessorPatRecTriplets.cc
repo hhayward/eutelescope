@@ -100,30 +100,32 @@ void EUTelProcessorPatRecTriplets::init(){
 
     _trackFitter = new EUTelPatRecTriplets();//This is the class that contains all the functions that do the actual work
 		
-    _trackFitter->setDoubletDistCut(_doubletDistCut);
-    _trackFitter->setTripletSlopeCuts(_tripletSlopeCuts);
-    _trackFitter->setDoubletCenDistCut(_doubletCenDistCut);
-    _trackFitter->setTripletConnectDistCut(_tripletConnectDistCut);
-    _trackFitter->setPlanesToCreateSeedsFrom(_createSeedsFromPlanes);
-    _trackFitter->setBeamMomentum(_eBeam);
-    _trackFitter->setBeamCharge(_qBeam);
-    _trackFitter->setAutoPlanestoCreateSeedsFrom();//If the user has not specified which planes to seed from the the first plane is used
-    _trackFitter->testUserInput();//Here we check that the user has provided the correct data. This is the most likey place to throw and exception.
-    bookHistograms();		// Book histograms. Yet again this should be replaced. TO DO:Create better histogram method.
-  }
-  catch(std::string &e){
-    streamlog_out(MESSAGE9) << e << std::endl;
-    throw marlin::StopProcessingException( this ) ;
-  }
-  catch(lcio::Exception& e){
-    streamlog_out(MESSAGE9) << e.what() <<std::endl;
-    throw marlin::StopProcessingException( this ) ;
 
-  }
-  catch(...){
-    streamlog_out(MESSAGE9)<<"Unknown exception in init function of pattern recognition" <<std::endl;
-    throw marlin::StopProcessingException( this ) ;
-  }
+		_trackFitter->setDoubletDistCut(_doubletDistCut);
+		_trackFitter->setTripletSlopeCuts(_tripletSlopeCuts);
+		_trackFitter->setDoubletCenDistCut(_doubletCenDistCut);
+        _trackFitter->setTripletConnectDistCut(_tripletConnectDistCut);
+		_trackFitter->setBeamMomentum(_eBeam);
+		_trackFitter->setBeamCharge(_qBeam);
+		_trackFitter->setAutoPlanestoCreateSeedsFrom();//If the user has not specified which planes to seed from the the first plane is used
+        _trackFitter->setPlaneDimensionsVec(_planeDimension);
+		_trackFitter->testUserInput();//Here we check that the user has provided the correct data. This is the most likey place to throw and exception.
+		bookHistograms();		// Book histograms. Yet again this should be replaced. TO DO:Create better histogram method.
+	}
+	catch(std::string &e){
+		streamlog_out(MESSAGE9) << e << std::endl;
+		throw marlin::StopProcessingException( this ) ;
+	}
+	catch(lcio::Exception& e){
+		streamlog_out(MESSAGE9) << e.what() <<std::endl;
+		throw marlin::StopProcessingException( this ) ;
+
+	}
+	catch(...){
+		streamlog_out(MESSAGE9)<<"Unknown exception in init function of pattern recognition" <<std::endl;
+		throw marlin::StopProcessingException( this ) ;
+	}
+
 }
 
 void EUTelProcessorPatRecTriplets::processRunHeader(LCRunHeader* run) {
@@ -151,82 +153,80 @@ void EUTelProcessorPatRecTriplets::processRunHeader(LCRunHeader* run) {
 
 void EUTelProcessorPatRecTriplets::processEvent(LCEvent* evt)
 {
-  UTIL::CellIDDecoder<TrackerHitImpl> hitDecoder ( EUTELESCOPE::HITENCODING );
 
-  try{
-    EUTelEventImpl* event = static_cast<EUTelEventImpl*> (evt); //Change the LCIO object to EUTel object. This is a simple way to extend functionality of the object.
-    _trackFitter->setEventNumber(_nProcessedEvents);//This is so we can use the event number with this class. 
-    // Do not process last event. For unknown events just a warning will do. 
-    if (event->getEventType() == kEORE) {
-      streamlog_out(DEBUG4) << "EORE found: nothing else to do." << std::endl;
-      return;
-    } else if (event->getEventType() == kUNKNOWN) {
-      streamlog_out(WARNING2) << "Event number " << event->getEventNumber() << " in run " << event->getRunNumber()<< " is of unknown type. Continue considering it as a normal Data Event." << std::endl;
-    }
-    LCCollection* hitMeasuredCollection = NULL;
-    hitMeasuredCollection = evt->getCollection(_hitInputCollectionName);
-    streamlog_out(DEBUG1) << "collection : " <<_hitInputCollectionName << " retrieved" << std::endl;
+	UTIL::CellIDDecoder<TrackerHitImpl> hitDecoder ( EUTELESCOPE::HITENCODING );
 
-    // this will only be entered if the collection is not available
-    if ( hitMeasuredCollection == NULL) {
-      streamlog_out(DEBUG2) << "EUTelProcessorPatRecTriplets :: processEvent() hitMeasuredCollection is void" << std::endl;
-      throw marlin::SkipEventException(this);
-    }
+	try{
+		EUTelEventImpl* event = static_cast<EUTelEventImpl*> (evt); //Change the LCIO object to EUTel object. This is a simple way to extend functionality of the object.
+		_trackFitter->setEventNumber(_nProcessedEvents);//This is so we can use the event number with this class. 
+		// Do not process last event. For unknown events just a warning will do. 
+		if (event->getEventType() == kEORE) {
+			streamlog_out(DEBUG4) << "EORE found: nothing else to do." << std::endl;
+			return;
+		} else if (event->getEventType() == kUNKNOWN) {
+			streamlog_out(WARNING2) << "Event number " << event->getEventNumber() << " in run " << event->getRunNumber()<< " is of unknown type. Continue considering it as a normal Data Event." << std::endl;
+		}
+		LCCollection* hitMeasuredCollection = NULL;
+		hitMeasuredCollection = evt->getCollection(_hitInputCollectionName);
+		streamlog_out(DEBUG1) << "collection : " <<_hitInputCollectionName << " retrieved" << std::endl;
 
-    // Prepare hits for track finder
-    EVENT::TrackerHitVec allHitsVec;
-    _trackFitter->clearFinalTracks(); //This is to clear the vector of tracks from the last event.
+		// this will only be entered if the collection is not available
+		if ( hitMeasuredCollection == NULL) {
+			streamlog_out(DEBUG2) << "EUTelProcessorPatRecTriplets :: processEvent() hitMeasuredCollection is void" << std::endl;
+			throw marlin::SkipEventException(this);
+		}
 
-    for(int iHit = 0; iHit < hitMeasuredCollection->getNumberOfElements(); iHit++) 
-      {
-	TrackerHitImpl* hit = static_cast<TrackerHitImpl*>(hitMeasuredCollection->getElementAt(iHit));
-	int sensorID = hitDecoder(static_cast<IMPL::TrackerHitImpl*>(hit))["sensorID"];
-	if ( sensorID >= 0 ) allHitsVec.push_back(hit);
-      }
+		// Prepare hits for track finder
+		EVENT::TrackerHitVec allHitsVec;
+		_trackFitter->clearFinalTracks(); //This is to clear the vector of tracks from the last event.
 
-    //TODO: this should never happen
-    if(allHitsVec.empty()) throw lcio::Exception("No hits!");
+		for(int iHit = 0; iHit < hitMeasuredCollection->getNumberOfElements(); iHit++) 
+		{
+			TrackerHitImpl* hit = static_cast<TrackerHitImpl*>(hitMeasuredCollection->getElementAt(iHit));
+                	int sensorID = hitDecoder(static_cast<IMPL::TrackerHitImpl*>(hit))["sensorID"];
+			if ( sensorID >= 0 ) allHitsVec.push_back(hit);
+		}
 
-    _trackFitter->setHitsVec(allHitsVec);//Will set data member of class _trackFitter. TO DO: We could do this within findHitsOrdervec.  
+		//TODO: this should never happen
+		if(allHitsVec.empty()) throw lcio::Exception("No hits!");
 
-    //		_trackFitter->printHits();//We print the hits to screen for debugging
-    //		streamlog_out(DEBUG2) << "Now map hits to planes" << std::endl;
+		_trackFitter->setHitsVec(allHitsVec);//Will set data member of class _trackFitter. TO DO: We could do this within findHitsOrdervec.  
 
-    _trackFitter->setHitsVecPerPlane();//Create map Sensor ID(non excluded)->HitsVec (Using geometry)
+		_trackFitter->printHits();//We print the hits to screen for debugging
+//		streamlog_out(DEBUG2) << "Now map hits to planes" << std::endl;
 
-    //		streamlog_out(DEBUG2) << "Test hits on the planes" << std::endl;
+		_trackFitter->setHitsVecPerPlane();//Create map Sensor ID(non excluded)->HitsVec (Using geometry)
 
-    _trackFitter->testHitsVecPerPlane();//tests the size of the map and does it contain hits
-    streamlog_out( DEBUG1 ) << "Trying to find tracks..." << std::endl;
+//		streamlog_out(DEBUG2) << "Test hits on the planes" << std::endl;
 
-    _trackFitter->createTriplets();
-    std::vector<EUTelTrack> tracks = _trackFitter->getTracks();
-    _trackFitter->testTrackQuality();
+		_trackFitter->testHitsVecPerPlane();//tests the size of the map and does it contain hits
+		streamlog_out( DEBUG1 ) << "Trying to find tracks..." << std::endl;
+        std::vector<EUTelTrack> tracks = _trackFitter->getTracks();
+        _trackFitter->testTrackQuality();
 
+		plotHistos(tracks);
 
-	
-    plotHistos(tracks);
+		outputLCIO(evt,tracks);
 
-    outputLCIO(evt,tracks);
+		_nProcessedEvents++;
+	}
+	catch (DataNotAvailableException e) {
+		streamlog_out(WARNING2) << " Collection not available" << std::endl;
+		throw marlin::SkipEventException(this);
+	}
+	catch(std::string &e){
+		streamlog_out(MESSAGE9) << e << std::endl;
+		throw marlin::SkipEventException( this ) ;
+	}
+	catch(lcio::Exception& e){
+		streamlog_out(MESSAGE9) << e.what() <<std::endl;
+		throw marlin::StopProcessingException( this ) ;
+	}
+	catch(...){
+		streamlog_out(MESSAGE9)<<"Unknown exception in process function of pattern recognition" <<std::endl;
+		throw marlin::StopProcessingException( this ) ;
+	}
 
-    _nProcessedEvents++;
-  }
-  catch (DataNotAvailableException e) {
-    streamlog_out(WARNING2) << " Collection not available" << std::endl;
-    throw marlin::SkipEventException(this);
-  }
-  catch(std::string &e){
-    streamlog_out(MESSAGE9) << e << std::endl;
-    throw marlin::SkipEventException( this ) ;
-  }
-  catch(lcio::Exception& e){
-    streamlog_out(MESSAGE9) << e.what() <<std::endl;
-    throw marlin::StopProcessingException( this ) ;
-  }
-  catch(...){
-    streamlog_out(MESSAGE9)<<"Unknown exception in process function of pattern recognition" <<std::endl;
-    throw marlin::StopProcessingException( this ) ;
-  }
 }
 
 void EUTelProcessorPatRecTriplets::outputLCIO(LCEvent* evt, std::vector<EUTelTrack>& tracks)
