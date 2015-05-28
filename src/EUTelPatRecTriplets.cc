@@ -127,11 +127,16 @@ void EUTelPatRecTriplets::setRadLengths(EUTelTrack & track,	std::map<const int,d
     const double Bz = (Bfield.at( vectorGlobal ).z());
     TVector3 B(Bx, By, Bz );
     TVector3 H = (B.Unit());
+    
     TVector3 curv = H.Cross(TVector3(0,0,1));
     //Note the cross product
-    double curvX = 0.0003*curv[0]*omega; 
-    double curvY = 0.0003*curv[1]*omega; 
+    double curvX = -0.0003*curv[0]*omega; //why 0.001 times 0.3 ?
+    double curvY = -0.0003*curv[1]*omega; 
+    streamlog_out(DEBUG0) << "... B.Unit() = "<<H[0]<<","<<H[1]<<","<<H[2]<<std::endl;
     streamlog_out(DEBUG0) << "... Bfield  ...." <<Bx<<","<<By<<","<<Bz<<std::endl;
+    streamlog_out(DEBUG0) << "... curv =   ...." <<curv[0]<<","<<curv[1]<<","<<curv[2]<<std::endl;
+    streamlog_out(DEBUG0) << "... curvX = "<<curvX<<std::endl;
+    streamlog_out(DEBUG0) << "... curvY = "<<curvY<<std::endl;
     std::vector<unsigned int> cenID;
     cenID.push_back(1);
     cenID.push_back(4);
@@ -150,7 +155,7 @@ void EUTelPatRecTriplets::setRadLengths(EUTelTrack & track,	std::map<const int,d
 	double hitLeftPos[] = { (*itHitLeft)->getPosition()[0], (*itHitLeft)->getPosition()[1], (*itHitLeft)->getPosition()[2] };
 	double hitLeftPosGlobal[3];
 	geo::gGeometry().local2Master(hitLeftLoc ,hitLeftPos,hitLeftPosGlobal);
-
+	streamlog_out(DEBUG0) << "hitLeftPos = " <<hitLeftPos[0]<<","<<hitLeftPos[1]<<","<<hitLeftPos[2]<<"," <<std::endl;
 	streamlog_out(DEBUG0) << "hitLeftPosGlobal = " <<hitLeftPosGlobal[0]<<","<<hitLeftPosGlobal[1]<<","<<hitLeftPosGlobal[2]<<"," <<std::endl;
 
 	EUTelState stateLeft;
@@ -163,7 +168,8 @@ void EUTelPatRecTriplets::setRadLengths(EUTelTrack & track,	std::map<const int,d
 	  double hitRightPos[] = { (*itHitRight)->getPosition()[0], (*itHitRight)->getPosition()[1], (*itHitRight)->getPosition()[2] };
 	  double hitRightPosGlobal[3];
 	  geo::gGeometry().local2Master(hitRightLoc ,hitRightPos,hitRightPosGlobal);
-
+	  streamlog_out(DEBUG0) << "hitRightPos = " <<hitRightPos[0]<<","<<hitRightPos[1]<<","<<hitRightPos[2]<<"," <<std::endl;
+	  streamlog_out(DEBUG0) << "hitRightPosGlobal = " <<hitRightPosGlobal[0]<<","<<hitRightPosGlobal[1]<<","<<hitRightPosGlobal[2]<<"," <<std::endl;
 
 	  EUTelState stateRight;
 	  stateRight.setLocation(hitRightLoc);
@@ -196,9 +202,9 @@ void EUTelPatRecTriplets::setRadLengths(EUTelTrack & track,	std::map<const int,d
 	    state.setHit(*itHit);
 	    state.setMomGlobalIncEne(doublet.slope,getBeamMomentum());
 	    float initDis = geo::gGeometry().getInitialDisplacementToFirstPlane();
-	    float x1 = hitPos[0] - 0.5*curvX*pow(hitPos[2] - initDis, 2);
-	    float y1 = hitPos[1] - 0.5*curvY*pow(hitPos[2] - initDis, 2);
-	    //    streamlog_out(DEBUG0) << "Centre Doublet/Hit positions: "<<doublet.pos.at(0)<<"/" <<x1<<"  " <<doublet.pos.at(1)<<"/"<<y1 << std::endl;
+	    float x1 = hitPos[0] + 0.5*curvX*pow(hitPos[2] - initDis, 2);
+	    float y1 = hitPos[1] + 0.5*curvY*pow(hitPos[2] - initDis, 2);
+	    streamlog_out(DEBUG0) << "Centre Doublet/Hit positions: "<<doublet.pos.at(0)<<"/" <<x1<<"  " <<doublet.pos.at(1)<<"/"<<y1 << std::endl;
 	    double delX = doublet.pos.at(0) - x1;
 	    double delY = doublet.pos.at(1) - y1;
 
@@ -544,11 +550,12 @@ std::vector<float>  EUTelPatRecTriplets::getTripPosAtZ(triplets trip, float posZ
   {
     float initDis = geo::gGeometry().getInitialDisplacementToFirstPlane();
     //Remove the curvature as a factor between hits. Therefore only the slope will displace the hit position from plane to plane.
-    float x1 = hitLeftPos[0] - 0.5*curvX*pow(hitLeftPos[2] - initDis, 2);
-    float y1 = hitLeftPos[1] - 0.5*curvY*pow(hitLeftPos[2] - initDis, 2);
-    float x2 = hitRightPos[0] - 0.5*curvX*pow(hitRightPos[2] - initDis, 2);
-    float y2 = hitRightPos[1] - 0.5*curvY*pow(hitRightPos[2] - initDis, 2);
-
+    float x1 = hitLeftPos[0] + 0.5*curvX*pow(hitLeftPos[2] - initDis, 2);
+    float y1 = hitLeftPos[1] + 0.5*curvY*pow(hitLeftPos[2] - initDis, 2);
+    float x2 = hitRightPos[0] + 0.5*curvX*pow(hitRightPos[2] - initDis, 2);
+    float y2 = hitRightPos[1] + 0.5*curvY*pow(hitRightPos[2] - initDis, 2);
+    streamlog_out(DEBUG0) << "Left Doublet/corrected positions: "<<hitLeftPos[0]<<"/" <<x1<<"  " <<hitLeftPos[1]<<"/"<<y1 << std::endl;
+    streamlog_out(DEBUG0) << "Right Doublet/corrected positions: "<<hitRightPos[0]<<"/" <<x2<<"  " <<hitRightPos[1]<<"/"<<y2 << std::endl;
     doublets doublet;
     doublet.pos.push_back((x2 + x1)/2.0);
     doublet.pos.push_back((y2 + y1)/2.0);
@@ -628,7 +635,7 @@ std::vector<float>  EUTelPatRecTriplets::getTripPosAtZ(triplets trip, float posZ
         
   void EUTelPatRecTriplets::printHits()
   {
-    streamlog_out(MESSAGE0) << "EUTelPatRecTriplets::prinitHit: BEGIN ==============" << std::endl;
+    streamlog_out(MESSAGE0) << "EUTelPatRecTriplets::prinitHit: BEGIN ============== nhits =" <<  _allHitsVec.size()<<std::endl;
     EVENT::TrackerHitVec::const_iterator itHit;
     for(itHit = _allHitsVec.begin(); itHit != _allHitsVec.end(); ++itHit )
       {
