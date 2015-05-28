@@ -100,7 +100,7 @@ void EUTelPatRecTriplets::setRadLengths(EUTelTrack & track,	std::map<const int,d
       throw(lcio::Exception( "Beam direction was set incorrectly")); 
     }
     else{
-      streamlog_out(DEBUG0) << "Beam energy is reasonable" << std::endl;
+      streamlog_out(DEBUG0) << "Beam energy is reasonable: _beamE = "<<_beamE << ", _beamQ = "<<_beamQ<<std::endl;
     }
     if(_createSeedsFromPlanes.size() == 0){
       throw(lcio::Exception( "The number of planes to make seeds from is 0. We need at least one plane"));
@@ -202,8 +202,8 @@ void EUTelPatRecTriplets::setRadLengths(EUTelTrack & track,	std::map<const int,d
 	    state.setHit(*itHit);
 	    state.setMomGlobalIncEne(doublet.slope,getBeamMomentum());
 	    float initDis = geo::gGeometry().getInitialDisplacementToFirstPlane();
-	    float x1 = hitPos[0] + 0.5*curvX*pow(hitPos[2] - initDis, 2);
-	    float y1 = hitPos[1] + 0.5*curvY*pow(hitPos[2] - initDis, 2);
+	    float x1 = hitPosGlobal[0] - 0.5*curvX*pow(hitPosGlobal[2] - initDis, 2);
+	    float y1 = hitPosGlobal[1] - 0.5*curvY*pow(hitPosGlobal[2] - initDis, 2);
 	    streamlog_out(DEBUG0) << "Centre Doublet/Hit positions: "<<doublet.pos.at(0)<<"/" <<x1<<"  " <<doublet.pos.at(1)<<"/"<<y1 << std::endl;
 	    double delX = doublet.pos.at(0) - x1;
 	    double delY = doublet.pos.at(1) - y1;
@@ -550,12 +550,16 @@ std::vector<float>  EUTelPatRecTriplets::getTripPosAtZ(triplets trip, float posZ
   {
     float initDis = geo::gGeometry().getInitialDisplacementToFirstPlane();
     //Remove the curvature as a factor between hits. Therefore only the slope will displace the hit position from plane to plane.
-    float x1 = hitLeftPos[0] + 0.5*curvX*pow(hitLeftPos[2] - initDis, 2);
-    float y1 = hitLeftPos[1] + 0.5*curvY*pow(hitLeftPos[2] - initDis, 2);
-    float x2 = hitRightPos[0] + 0.5*curvX*pow(hitRightPos[2] - initDis, 2);
-    float y2 = hitRightPos[1] + 0.5*curvY*pow(hitRightPos[2] - initDis, 2);
-    streamlog_out(DEBUG0) << "Left Doublet/corrected positions: "<<hitLeftPos[0]<<"/" <<x1<<"  " <<hitLeftPos[1]<<"/"<<y1 << std::endl;
-    streamlog_out(DEBUG0) << "Right Doublet/corrected positions: "<<hitRightPos[0]<<"/" <<x2<<"  " <<hitRightPos[1]<<"/"<<y2 << std::endl;
+    float x1 = hitLeftPos[0] - 0.5*curvX*pow(hitLeftPos[2] - initDis, 2);
+    float y1 = hitLeftPos[1] - 0.5*curvY*pow(hitLeftPos[2] - initDis, 2);
+    float x2 = hitRightPos[0] - 0.5*curvX*pow(hitRightPos[2] - initDis, 2);
+    float y2 = hitRightPos[1] - 0.5*curvY*pow(hitRightPos[2] - initDis, 2);
+
+    streamlog_out(DEBUG0) << ".....initDis = "<<initDis<<std::endl;
+    streamlog_out(DEBUG0) << ".....hitLeftPos[2] = "<<hitLeftPos[2]<<std::endl;
+    streamlog_out(DEBUG0) << ".....hitRightPos[2] = "<<hitRightPos[2]<<std::endl;
+    streamlog_out(DEBUG0) << ".....Left Doublet/corrected positions: "<<hitLeftPos[0]<<"/" <<x1<<"  " <<hitLeftPos[1]<<"/"<<y1 << std::endl;
+    streamlog_out(DEBUG0) << ".....Right Doublet/corrected positions: "<<hitRightPos[0]<<"/" <<x2<<"  " <<hitRightPos[1]<<"/"<<y2 << std::endl;
     doublets doublet;
     doublet.pos.push_back((x2 + x1)/2.0);
     doublet.pos.push_back((y2 + y1)/2.0);
