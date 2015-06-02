@@ -274,11 +274,14 @@ void EUTelProcessorPatRecTriplets::check(LCEvent * /*evt*/) {
 }
 
 void EUTelProcessorPatRecTriplets::end() {
-  streamlog_out(MESSAGE9) << "EUTelProcessorPatRecTriplets::end()  " << name()
-			  << " processed " << _nProcessedEvents << " events in " << _nProcessedRuns << " runs "
-			  << " av.tracks : " << static_cast<float>(_trackFitter->_numberOfTracksTotal)/static_cast<float>(_nProcessedEvents)
-			  << std::endl;
-  delete _trackFitter;
+
+    streamlog_out(MESSAGE9) << "EUTelProcessorPatRecTriplets::end()  " << name()
+            << " processed " << _nProcessedEvents << " events in " << _nProcessedRuns << " runs "
+            << " av.tracks : " << static_cast<float>(_trackFitter->_numberOfTracksTotal)/static_cast<float>(_nProcessedEvents)
+            <<" total number of tracks: " << _trackFitter->_numberOfTracksTotal
+            << std::endl;
+            delete _trackFitter;
+
 
 }
 //TO DO: Create a better way of booking histograms.
