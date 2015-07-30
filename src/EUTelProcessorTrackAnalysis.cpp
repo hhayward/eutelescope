@@ -473,10 +473,10 @@ void	EUTelProcessorTrackAnalysis::initialiseHitMapHistograms(){
 		histTitle = sstm.str();
 		sstm.str(std::string(""));
 		histoInfo = histoMgr->getHistogramInfo(residGblFitHistName);
-		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 80;
+		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 900;
 		MinX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMin :-15 ;
 		MaxX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMax : 15;
-		NBinY = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yBin : 80;
+		NBinY = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yBin : 900;
 		MinY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMin : -15;
 		MaxY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMax : 15;
 		MinZ =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_zMin : -20;
