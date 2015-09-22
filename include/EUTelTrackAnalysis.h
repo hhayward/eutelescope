@@ -35,8 +35,9 @@ namespace eutelescope {
 		std::map< int,  AIDA::IHistogram1D * > _mapFromSensorIDToIncidenceYZ;
 		std::map< int,   AIDA::IProfile1D *> _mapFromSensorIDToPValuesVsIncidenceXZ;
 		std::map< int,  AIDA::IProfile1D * > _mapFromSensorIDToPValuesVsIncidenceYZ;
-
-    EUTelTrackAnalysis(std::map< int,  AIDA::IProfile2D*> mapFromSensorIDToHistogramX, std::map< int,  AIDA::IProfile2D*> mapFromSensorIDToHistogramY, std::map< int,  AIDA::IHistogram2D*> mapFromSensorIDHitMap, std::map< int,  AIDA::IProfile2D*> mapFromSensorIDToEfficiencyX, std::map< int,  AIDA::IProfile2D*> mapFromSensorIDToEfficiencyY, std::map< int,   AIDA::IHistogram1D *> mapFromSensorIDToKinkXZ,std::map< int,   AIDA::IHistogram1D *> mapFromSensorIDToKinkYZ, AIDA::IHistogram1D * beamEnergy );
+		std::map< int, float> _mapFromSensorPitchX;
+		std::map< int, float> _mapFromSensorPitchY;
+		EUTelTrackAnalysis(std::map< int,  AIDA::IProfile2D*> mapFromSensorIDToHistogramX, std::map< int,  AIDA::IProfile2D*> mapFromSensorIDToHistogramY, std::map< int,  AIDA::IHistogram2D*> mapFromSensorIDHitMap, std::map< int,  AIDA::IProfile2D*> mapFromSensorIDToEfficiencyX, std::map< int,  AIDA::IProfile2D*> mapFromSensorIDToEfficiencyY, std::map< int,   AIDA::IHistogram1D *> mapFromSensorIDToKinkXZ,std::map< int,   AIDA::IHistogram1D *> mapFromSensorIDToKinkYZ, AIDA::IHistogram1D * beamEnergy ,std::map< int, float> _mapFromSensorPitchX,std::map< int, float> _mapFromSensorPitchY);
 
 		template<typename T>
 		std::string numberToString(T number);
@@ -48,6 +49,7 @@ namespace eutelescope {
 		void plotPValueWithPosition(EUTelTrack track);
 		void plotPValueWithIncidenceAngles(EUTelTrack track);
 		void plotPValueVsBeamEnergy(EUTelTrack track);
+		void setSensorPitch(std::map< int, float> mapFromSensorPitchX,std::map< int, float>mapFromSensorPitchY){ _mapFromSensorPitchX = mapFromSensorPitchX; _mapFromSensorPitchY = mapFromSensorPitchY; }
 		void setBeamEnergy(AIDA::IHistogram1D *  beamEnergy){ _beamEnergy = beamEnergy; }
 		void setPValueBeamEnergy(AIDA::IProfile1D *  pValueVsBeamEnergy){ _pValueVsBeamEnergy = pValueVsBeamEnergy; }
 		void setSensorIDTo2DHitMap(std::map< int,  AIDA::IHistogram2D*> mapFromSensorIDHitMap){_mapFromSensorIDHitMap=mapFromSensorIDHitMap;}
@@ -61,10 +63,14 @@ namespace eutelescope {
 		void setSensorIDToPValuesVsIncidenceAngleXZ( std::map< int,  AIDA::IProfile1D * > mapFromSensorIDToPValuesVsIncidenceXZ){_mapFromSensorIDToPValuesVsIncidenceXZ=mapFromSensorIDToPValuesVsIncidenceXZ;}
 		void setSensorIDToPValuesVsIncidenceAngleYZ( std::map< int,  AIDA::IProfile1D * > mapFromSensorIDToPValuesVsIncidenceYZ){_mapFromSensorIDToPValuesVsIncidenceYZ=mapFromSensorIDToPValuesVsIncidenceYZ;}
 //		void setHistName(std::string histName){  _histoInfoFileName = histName; }
+
         void setTotNum(EUTelTrack & track);
         void print();
-
+	double getFoldedX(TVector3 position, float pitchX) ;
+	double getFoldedY(TVector3 position, float pitchY) ;
         protected:
+			  //gear::SiPlanesParameters * _siPlanesParameters;
+			  //gear::SiPlanesLayerLayout * _siPlanesLayerLayout;
         std::map<int, float > _senResTotX;
         std::map<int, float > _senResTotY;
         std::map<int, float > _senResTotZ;

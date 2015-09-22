@@ -382,6 +382,15 @@ void EUTelProcessorNoisyPixelFinder::check(LCEvent* /*event*/ )
 						//writing out is done here
 						_hotPixelMap[it->first].push_back(pixel);
 					}
+					// //add random inefficiency here
+					// if(it->first ==20){
+					//   int isecret=rand()% 10+1;
+					//   if (isecret==3){
+					//     std::cout<<"random 10% inefficiency, isecret = "<<isecret<<std::endl;
+					//     _hotPixelMap[it->first].push_back(pixel);
+					//   }
+					// }
+					//	std::cout<<"it->first = "<<it->first<<std::endl;
 				}
 			}
 		}

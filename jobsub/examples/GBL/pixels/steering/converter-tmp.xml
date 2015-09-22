@@ -19,6 +19,7 @@
       <processor name="AIDA"/>
       <processor name="UniversalNativeReader"/>
       <processor name="NoisyPixelMaskerM26"/>
+      <processor name="NoisyPixelMaskerAPIX"/>
       <xprocessor name="SaveAsRoot"/>
       <processor name="Save"/>
       <processor name="EUTelUtilityPrintEventNumber"/>

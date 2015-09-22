@@ -6,6 +6,11 @@
  * 4)You now have the trackand histogram. Do the analysis and output to that histogram or anyone oyu want.   */
 #include "EUTelProcessorTrackAnalysis.h"
 #include <AIDA/IAxis.h>      
+
+// eutelescope geometry
+#include "EUTelGeometryTelescopeGeoDescription.h"
+#include "EUTelGenericPixGeoDescr.h"
+
 using namespace eutelescope;
 
 EUTelProcessorTrackAnalysis::EUTelProcessorTrackAnalysis() :
@@ -21,13 +26,30 @@ Processor("EUTelProcessorTrackAnalysis"){
 
 
 void EUTelProcessorTrackAnalysis::init(){
+
+	//Helen trying to access pitch information
+ // std::cout<<"Helen: lets try to retrieve the geo information"     <<std::endl;
+ // 	for( EVENT::IntVec::iterator it = _sensorIDs.begin(); it != _sensorIDs.end(); ++it ) 
+ // 	  {
+ // 	    std::cout<<"Helen: sensor id = "<<*it<<std::endl;
+ // 	    try
+ // 	      {
+	
+ // 	      }
+ // 	catch(std::runtime_error& e)
+ // 		{
+ // 			streamlog_out ( ERROR0 ) << "hELEN could not retrieve plane " << *it << std::endl;
+ // 			streamlog_out ( ERROR0 ) << e.what() << std::endl;
+ // 			//throw StopProcessingException(this);
+ // 		}
+ // 	  }
 	try{
 		initialiseResidualVsPositionHistograms();
 		initialiseHitMapHistograms();
 		initialiseEfficiencyVsPositionHistograms();
-		
+		initialiseGeoInfo();//fill array of pitch info here
 		//Some initialised in the constructor in part 2.
-		EUTelTrackAnalysis*	analysis = new EUTelTrackAnalysis(_mapFromSensorIDToHistogramX,_mapFromSensorIDToHistogramY,_mapFromSensorHitMap,_mapFromSensorIDToEfficiencyX,_mapFromSensorIDToEfficiencyY,_mapFromSensorIDToGloIncXZ,_mapFromSensorIDToGloIncYZ,_beamEnergy); 
+		EUTelTrackAnalysis*	analysis = new EUTelTrackAnalysis(_mapFromSensorIDToHistogramX,_mapFromSensorIDToHistogramY,_mapFromSensorHitMap,_mapFromSensorIDToEfficiencyX,_mapFromSensorIDToEfficiencyY,_mapFromSensorIDToGloIncXZ,_mapFromSensorIDToGloIncYZ,_beamEnergy, _mapFromSensorPitchX,_mapFromSensorPitchY); 
 
 		//Others here.
 		analysis->setSensorIDTo2DPValuesWithPosition(_mapFromSensorIDToPValueHisto);
@@ -40,6 +62,7 @@ void EUTelProcessorTrackAnalysis::init(){
 		streamlog_out(MESSAGE9)<<"There is an unknown error in EUTelProcessorTrackAnalysis-init()" <<std::endl;
 		throw marlin::StopProcessingException( this ) ;
 	}
+
 
 }
 
@@ -61,6 +84,7 @@ void EUTelProcessorTrackAnalysis::processEvent(LCEvent * evt){
         for (int iTrack = 0; iTrack < tracks.size(); ++iTrack){
    //         track.print();
             EUTelTrack track = tracks.at(iTrack); 
+	    //std::cout<<"--Helen: track "<<iTrack<<" out of "<<tracks.size()<<std::endl;
             _analysis->plotResidualVsPosition(track);
 	    _analysis->plotHitMap(track);
             _analysis->plotEfficiencyVsPosition(track,_sensorIDs);	
@@ -105,6 +129,7 @@ void EUTelProcessorTrackAnalysis::end(){
   bool isHistoManagerAvailable;
   std::stringstream sstm;
   std::string elementEffDistHistName;
+  std::string elementEffDistHistLooseName;
   std::string histTitle;
   // isHistoManagerAvailable = histoMgr->init( );
   //streamlog_out(DEBUG2) <<" HELEN inside postprocessing, isHistoManagerAvailable = "<< isHistoManagerAvailable<<std::endl;
@@ -118,17 +143,59 @@ void EUTelProcessorTrackAnalysis::end(){
     histoInfo = histoMgr->getHistogramInfo(elementEffDistHistName);
     AIDA::IHistogram1D * elementEffDist = marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D(elementEffDistHistName, 101, 0.0, 1.01); 
     streamlog_out(DEBUG2) <<" HELEN _mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->allEntries(); = "<<_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->allEntries()<<std::endl;
+
+    //loose acceptance
+    sstm << "elementEffDistLoose" << _sensorIDs.at(i);
+    elementEffDistHistLooseName = sstm.str();
+    sstm.str(std::string());
+    sstm << "elementEffDistLoose " <<  _sensorIDs.at(i);
+    histTitle = sstm.str();
+    sstm.str(std::string(""));
+    histoInfo = histoMgr->getHistogramInfo(elementEffDistHistLooseName);
+    AIDA::IHistogram1D * elementEffDistLoose = marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D(elementEffDistHistLooseName, 101, 0.0, 1.01); 
+    // streamlog_out(DEBUG2) <<" HELEN _mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->allEntries(); = "<<_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->allEntries()<<std::endl;
+    if(_sensorIDs.at(i)>10){
     //loop over x and y
     for(int x = 0; x < _mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->xAxis().bins(); ++x){
-      for(int y = 0; y < _mapFromSensorIDToEfficiencyY[_sensorIDs.at(i)]->yAxis().bins(); ++y){
-	elementEffDist->fill(_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->binHeight(x,y));
+      if (x>_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexX(-3)
+	  && x<_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexX(7)){
+	    for(int y = _mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexY(-4.5); y < _mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->yAxis().bins(); ++y){
+	      if (y>_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexY(4.5))continue;
+	      if( _mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->binEntries(x,y)>0){
+		//if x is between -3 and 7 and y between +/-4.5
+		
+		if (x>_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexX(-2)
+		    && x<_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexX(6)
+		    && y>_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexY(-3.5)
+		    && y<_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexY(3.5)){
+		  elementEffDist->fill(_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->binHeight(x,y));
+		  if(_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->binHeight(x,y)<0.8){
+		    //	    std::cout<<_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->binHeight(x,y)<<" _mapFromSensorIDToEfficiencyX["<<_sensorIDs.at(i)<<"]->coordToIndexX(-2) = "<<_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexX(-2)<<" _mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexX(6) = "<<_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexX(6)<<" x = "<<x<<std::endl;
+		    //	    std::cout<<"_mapFromSensorIDToEfficiencyX["<<_sensorIDs.at(i)<<"]->coordToIndexY(-3.5) = "<<_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexY(-3.5)<<" _mapFromSensorIDToEfficiencyX["<<_sensorIDs.at(i)<<"]->coordToIndexY(3.5) = "<<_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexY(3.5)<<" y = "<<y<<std::endl;
+		  }
+		}
+		
+		if (x>_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexX(-3)
+		    && x<_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexX(7)
+		    && y>_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexY(-4.5)
+		    && y<_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->coordToIndexY(4.5)){
+		  elementEffDistLoose->fill(_mapFromSensorIDToEfficiencyX[_sensorIDs.at(i)]->binHeight(x,y));
+		  
+		}
+		
+	      }
 	//streamlog_out(DEBUG2) <<" HELEN still here"<<std::endl;
-      }
-    }
+	    }
+	  }
+	  }
     //if entry
     //fill elementEffDist
-  }
 
+    std::cout<<"Tight acceptance cut [-2<x<6, -3.5<y<3.5] Sensor "<< _sensorIDs.at(i) <<"   Efficiency = "<<elementEffDist->mean()<<" rms = "<<elementEffDist->rms()<<std::endl;
+    std::cout<<"Loose acceptance cut [-3<x<7, -4.5<y<4.5] Sensor "<< _sensorIDs.at(i) <<"   Efficiency = "<<elementEffDistLoose->mean()<<" rms = "<<elementEffDistLoose->rms()<<std::endl;
+    }
+    }
+  
     ///Will print the final results of the analysis
     _analysis->print();
 
@@ -174,12 +241,12 @@ void	EUTelProcessorTrackAnalysis::initialiseEfficiencyVsPositionHistograms(){
 		histTitle = sstm.str();
 		sstm.str(std::string(""));
 		histoInfo = histoMgr->getHistogramInfo(effGblFitHistName);
-		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 80;
-		MinX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMin :-15 ;
-		MaxX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMax : 15;
-		NBinY = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yBin : 80;
-		MinY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMin : -15;
-		MaxY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMax : 15;
+		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 200;
+		MinX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMin :-10 ;
+		MaxX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMax : 10;
+		NBinY = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yBin : 200;
+		MinY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMin : -10;
+		MaxY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMax : 10;
 		MinZ =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_zMin : -20;
 		MaxZ =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_zMax : 20;
 		AIDA::IProfile2D *  residGblFitX =	marlin::AIDAProcessor::histogramFactory(this)->createProfile2D(effGblFitHistName,  NBinX, MinX, MaxX, NBinY, MinY, MaxY, MinZ,MaxZ);
@@ -200,12 +267,12 @@ void	EUTelProcessorTrackAnalysis::initialiseEfficiencyVsPositionHistograms(){
 		histTitle = sstm.str();
 		sstm.str(std::string(""));
 		histoInfo = histoMgr->getHistogramInfo(effGblFitHistName);
-		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 80;//every 500 micron there is a bin
-		MinX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMin :-15 ;
-		MaxX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMax : 15;
-		NBinY = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yBin : 80;//every 500 micron there is a bin
-		MinY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMin : -15;
-		MaxY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMax : 15;
+		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 50;//every 500 micron there is a bin
+		MinX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMin :-0.0 ;
+		MaxX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMax : 0.25;
+		NBinY = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yBin : 50;//every 500 micron there is a bin
+		MinY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMin : -0.0;
+		MaxY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMax : 0.05;
 		MinZ =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_zMin : -20;
 		MaxZ =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_zMax : 20;
 		AIDA::IProfile2D *  residGblFitY =	marlin::AIDAProcessor::histogramFactory(this)->createProfile2D(effGblFitHistName,  NBinX, MinX, MaxX, NBinY, MinY, MaxY, MinZ,MaxZ);
@@ -259,12 +326,12 @@ void	EUTelProcessorTrackAnalysis::initialiseResidualVsPositionHistograms(){
 		histTitle = sstm.str();
 		sstm.str(std::string(""));
 		histoInfo = histoMgr->getHistogramInfo(residGblFitHistName);
-		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 80;
-		MinX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMin :-15 ;
-		MaxX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMax : 15;
-		NBinY = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yBin : 80;
-		MinY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMin : -15;
-		MaxY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMax : 15;
+		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 200;
+		MinX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMin :-10 ;
+		MaxX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMax : 10;
+		NBinY = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yBin : 200;
+		MinY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMin : -10;
+		MaxY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMax : 10;
 		MinZ =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_zMin : -20;
 		MaxZ =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_zMax : 20;
 		AIDA::IProfile2D *  residGblFitX =	marlin::AIDAProcessor::histogramFactory(this)->createProfile2D(residGblFitHistName,  NBinX, MinX, MaxX, NBinY, MinY, MaxY, MinZ,MaxZ);
@@ -285,12 +352,12 @@ void	EUTelProcessorTrackAnalysis::initialiseResidualVsPositionHistograms(){
 		histTitle = sstm.str();
 		sstm.str(std::string(""));
 		histoInfo = histoMgr->getHistogramInfo(residGblFitHistName);
-		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 80;//every 500 micron there is a bin
-		MinX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMin :-15 ;
-		MaxX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMax : 15;
-		NBinY = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yBin : 80;//every 500 micron there is a bin
-		MinY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMin : -15;
-		MaxY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMax : 15;
+		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 200;//every 500 micron there is a bin
+		MinX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMin :-10 ;
+		MaxX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMax : 10;
+		NBinY = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yBin : 200;//every 500 micron there is a bin
+		MinY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMin : -10;
+		MaxY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMax : 10;
 		MinZ =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_zMin : -20;
 		MaxZ =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_zMax : 20;
 		AIDA::IProfile2D *  residGblFitY =	marlin::AIDAProcessor::histogramFactory(this)->createProfile2D(residGblFitHistName,  NBinX, MinX, MaxX, NBinY, MinY, MaxY, MinZ,MaxZ);
@@ -431,7 +498,33 @@ void	EUTelProcessorTrackAnalysis::initialiseResidualVsPositionHistograms(){
 	_pValueVsBeamEnergy = marlin::AIDAProcessor::histogramFactory(this)->createProfile1D("p-Value Vs Beam Energy", 50, 0, 6, 0,1); 
 
 }
+void	EUTelProcessorTrackAnalysis::initialiseGeoInfo(){
+  for (size_t i = 0; i < _sensorIDs.size() ; ++i){
+    streamlog_out (MESSAGE5)<<"sensor id = "<<i<<" _sensorIDs.at(i) = "<<_sensorIDs.at(i)<<std::endl;
+    //get the geoemtry description of the plane
+    geo::EUTelGenericPixGeoDescr* geoDescr = geo::gGeometry().getPixGeoDescr( _sensorIDs.at(i) ) ;
+    //get the max/min pixel indices
+    int minX, minY, maxX, maxY;
+    minX = minY = maxX = maxY = 0;
+    geoDescr->getPixelIndexRange( minX, maxX, minY, maxY );
+    float sizeX, sizeY, sizeZ;
+    sizeX= 0.; sizeY=0.; sizeZ=0.;
+    geoDescr->getSensitiveSize(sizeX, sizeY, sizeZ);
+    streamlog_out (MESSAGE5)<<"sensor id = "<<i<<" has minX, maxX, minY, maxY = "<<minX<<","<< maxX<<","<<  minY<<", "<< maxY <<" and sensitive size = "<<sizeX<<","<< sizeY<<","<<  sizeZ<<std::endl;
+    float pitchX =0.0;
+    float pitchY =0.0;
+    if(_sensorIDs.at(i) >=20){
+      sizeX=int(sizeX);
 
+    }//hack by helen.   why is size =20.3????
+    streamlog_out (MESSAGE5)<<"sensor id("<<i<<") = "<<_sensorIDs.at(i)<<" has minX, maxX, minY, maxY = "<<minX<<","<< maxX<<","<<  minY<<", "<< maxY <<" and sensitive size = "<<sizeX<<","<< sizeY<<","<<  sizeZ<<std::endl;
+    pitchX = sizeX/(maxX-minX+1);
+    pitchY = sizeY/(maxY-minY+1);
+    streamlog_out (MESSAGE5)<<"pitchX = "<<pitchX<<"   pitchY = "<<pitchY<<std::endl; 
+    _mapFromSensorPitchX.insert(std::make_pair(_sensorIDs.at(i), pitchX));
+    _mapFromSensorPitchY.insert(std::make_pair(_sensorIDs.at(i), pitchY));
+  }
+}
 
 
 void	EUTelProcessorTrackAnalysis::initialiseHitMapHistograms(){
@@ -473,12 +566,12 @@ void	EUTelProcessorTrackAnalysis::initialiseHitMapHistograms(){
 		histTitle = sstm.str();
 		sstm.str(std::string(""));
 		histoInfo = histoMgr->getHistogramInfo(residGblFitHistName);
-		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 900;
-		MinX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMin :-15 ;
-		MaxX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMax : 15;
-		NBinY = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yBin : 900;
-		MinY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMin : -15;
-		MaxY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMax : 15;
+		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 500;
+		MinX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMin :-10 ;
+		MaxX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMax : 10;
+		NBinY = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yBin : 500;
+		MinY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMin : -10;
+		MaxY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMax : 10;
 		MinZ =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_zMin : -20;
 		MaxZ =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_zMax : 20;
 		AIDA::IHistogram2D *  HitMap =	marlin::AIDAProcessor::histogramFactory(this)->createHistogram2D(residGblFitHistName,  NBinX, MinX, MaxX, NBinY, MinY, MaxY);
