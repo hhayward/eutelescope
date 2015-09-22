@@ -71,7 +71,7 @@ namespace eutelescope {
     EUTelPatRecTriplets(AIDA::IHistogram1D * _DoubletXseperationHistoRight, AIDA::IHistogram1D * _DoubletYseperationHistoRight, AIDA::IHistogram1D * _DoubletXseperationHistoLeft,
 				    AIDA::IHistogram1D * _DoubletYseperationHistoLeft, AIDA::IHistogram1D * _TripletXseperationHistoRight, AIDA::IHistogram1D * _TripletYseperationHistoRight, 
 				    AIDA::IHistogram1D * _TripletXseperationHistoLeft, AIDA::IHistogram1D * _TripletYseperationHistoLeft, AIDA::IHistogram1D * _TripletDistCutXHisto,
-				    AIDA::IHistogram1D *_TripletDistCutYHisto);
+				    AIDA::IHistogram1D *_TripletDistCutYHisto, AIDA::IHistogram1D * TripletSlopeHistoX ,AIDA::IHistogram1D * TripletSlopeHistoY, AIDA::IHistogram1D * DUTWindowHisto);
 
     //! Struct object 
     /*! This contains the informtion needed to construct a track from two hits. 
@@ -228,14 +228,6 @@ namespace eutelescope {
      * \return -cZxB The correct order of hits returned. 
      */
     std::vector<EUTelHit> getCorrHitOrder(std::vector<EUTelHit> hits );
-    //! This will place DUT hit in track. 
-    /*! 
-     *  @param[in] track track without DUT hits. 
-     *  @param[in] hits DUT hits to add to hit.
-     *  @return hits Hits in the correct order with DUT hits. 
-     */
-
-    std::vector<EUTelHit> getDUTHitsOrder(EUTelTrack track, std::vector<EUTelHit> dutHit );
     //! Get all hits which the predicted doublet passes  
     /*! 
      *  A predicted track from the doublet is constructed. At each sensor the closest hit is taken if included in list in arguments.
@@ -283,6 +275,9 @@ namespace eutelescope {
     AIDA::IHistogram1D * _TripletYseperationHistoLeft;
     AIDA::IHistogram1D * _TripletDistCutXHisto;
     AIDA::IHistogram1D * _TripletDistCutYHisto;
+    AIDA::IHistogram1D * _TripletSlopeHistoX ;
+    AIDA::IHistogram1D * _TripletSlopeHistoY ;
+    AIDA::IHistogram1D * _DUTWindowHisto;
 
 
     DISALLOW_COPY_AND_ASSIGN(EUTelPatRecTriplets) // prevent users from making (default) copies of processors
@@ -314,6 +309,8 @@ namespace eutelescope {
     double _dutDistCut;
     public:
     unsigned int _numberOfTracksTotal;
+    int _numberOfTracksDUTTotal;
+
 
 		
 	};

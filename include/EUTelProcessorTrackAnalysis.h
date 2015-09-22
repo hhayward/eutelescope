@@ -64,6 +64,7 @@ namespace eutelescope {
 		std::map< int, float> _mapFromSensorPitchY;
 
 		std::map< int,  AIDA::IHistogram2D* > _mapFromSensorHitMap;
+		std::map< int,  AIDA::IProfile2D* > _mapFromSensorKinksMap;
 		std::map< int,  AIDA::IProfile2D* > _mapFromSensorIDToHistogramX;
 		std::map< int,  AIDA::IProfile2D* > _mapFromSensorIDToHistogramY;
 		std::map< int,  AIDA::IProfile2D* > _mapFromSensorIDToEfficiencyX;
@@ -71,6 +72,9 @@ namespace eutelescope {
 		std::map< int,  AIDA::IProfile2D* > _mapFromSensorIDToPValueHisto;
 		std::map< int,   AIDA::IHistogram1D *> _mapFromSensorIDToGloIncXZ;
 		std::map< int,  AIDA::IHistogram1D * > _mapFromSensorIDToGloIncYZ;
+		std::map< int,   AIDA::IHistogram1D *> _mapKinksX;
+		std::map< int,  AIDA::IHistogram1D * > _mapKinksY;
+
 		std::map< int,  AIDA::IProfile1D* > _mapFromSensorIDToPValuesVsIncidenceXZ;
 		std::map< int,  AIDA::IProfile1D* > _mapFromSensorIDToPValuesVsIncidenceYZ;
 		AIDA::IHistogram1D * _beamEnergy;

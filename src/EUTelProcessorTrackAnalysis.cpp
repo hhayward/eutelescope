@@ -49,7 +49,9 @@ void EUTelProcessorTrackAnalysis::init(){
 		initialiseEfficiencyVsPositionHistograms();
 		initialiseGeoInfo();//fill array of pitch info here
 		//Some initialised in the constructor in part 2.
-		EUTelTrackAnalysis*	analysis = new EUTelTrackAnalysis(_mapFromSensorIDToHistogramX,_mapFromSensorIDToHistogramY,_mapFromSensorHitMap,_mapFromSensorIDToEfficiencyX,_mapFromSensorIDToEfficiencyY,_mapFromSensorIDToGloIncXZ,_mapFromSensorIDToGloIncYZ,_beamEnergy, _mapFromSensorPitchX,_mapFromSensorPitchY); 
+
+		EUTelTrackAnalysis*	analysis = new EUTelTrackAnalysis(_mapFromSensorIDToHistogramX,_mapFromSensorIDToHistogramY,_mapFromSensorHitMap,_mapFromSensorIDToEfficiencyX,_mapFromSensorIDToEfficiencyY,_mapFromSensorIDToGloIncXZ,_mapFromSensorIDToGloIncYZ, _mapKinksX, _mapKinksY, _mapFromSensorKinksMap,_beamEnergy, _mapFromSensorPitchX,_mapFromSensorPitchY); 
+
 
 		//Others here.
 		analysis->setSensorIDTo2DPValuesWithPosition(_mapFromSensorIDToPValueHisto);
@@ -86,15 +88,18 @@ void EUTelProcessorTrackAnalysis::processEvent(LCEvent * evt){
             EUTelTrack track = tracks.at(iTrack); 
 	    //std::cout<<"--Helen: track "<<iTrack<<" out of "<<tracks.size()<<std::endl;
             _analysis->plotResidualVsPosition(track);
-	    _analysis->plotHitMap(track);
+            _analysis->plotHitMap(track);
             _analysis->plotEfficiencyVsPosition(track,_sensorIDs);	
             _analysis->plotIncidenceAngles(track);
-            if(track.getChi2()/track.getNdf() < 5.0){
-                _analysis->plotBeamEnergy(track);
+            _analysis->plotKinksVsPosition(track);
+            _analysis->plotKinks(track);
+            _analysis->plotBeamEnergy(track);
+            ///Only plot p-value if we have chi2 and ndf. If less than one then can not plot. 
+            if(track.getNdf() > 1 ){
                 _analysis->plotPValueVsBeamEnergy(track);
-            }//if(track.getChi2()/track.getNdf() < 5.0){
-            _analysis->plotPValueWithPosition(track);
-            _analysis->plotPValueWithIncidenceAngles(track);
+                _analysis->plotPValueWithPosition(track);
+                _analysis->plotPValueWithIncidenceAngles(track);
+            }
            _analysis->setTotNum(track);
 
         }//for (int iTrack = 0; iTrack < tracks.size(); ++iTrack){
@@ -584,6 +589,81 @@ void	EUTelProcessorTrackAnalysis::initialiseHitMapHistograms(){
 		}
 		sstm.str(std::string(""));
 	}
+	for (size_t i = 0; i < _sensorIDs.size() ; ++i){
+		/////////////////////////////////////////////////////////////////////////////Kinks with position.
+		sstm << "Kinks" << _sensorIDs.at(i);
+		residGblFitHistName = sstm.str();
+		sstm.str(std::string());
+		sstm << "Kinks. Plane " <<  _sensorIDs.at(i) << ";X direction; Y direction";
+		histTitle = sstm.str();
+		sstm.str(std::string(""));
+		histoInfo = histoMgr->getHistogramInfo(residGblFitHistName);
+		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 80;
+		MinX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMin :-15 ;
+		MaxX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMax : 15;
+		NBinY = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yBin : 80;
+		MinY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMin : -15;
+		MaxY =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_yMax : 15;
+		MinZ =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_zMin : -20;
+		MaxZ =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_zMax : 20;
+        AIDA::IProfile2D*  kinksMap =	marlin::AIDAProcessor::histogramFactory(this)->createProfile2D(residGblFitHistName,  NBinX, MinX, MaxX, NBinY, MinY, MaxY);
+		if (kinksMap) {
+				kinksMap->setTitle(histTitle);
+				_mapFromSensorKinksMap.insert(std::make_pair(_sensorIDs.at(i), kinksMap));
+		} else {
+				streamlog_out(ERROR2) << "Problem booking the " << (residGblFitHistName) << std::endl;
+				streamlog_out(ERROR2) << "Very likely a problem with path name. Switching off histogramming and continue w/o" << std::endl;
+		}
+		sstm.str(std::string(""));
+	}
+    /////Kink angles
+	for(size_t i = 0; i < _sensorIDs.size() ; ++i){
+		sstm << "KinkX" << _sensorIDs.at(i);
+		residGblFitHistName = sstm.str();
+		sstm.str(std::string());
+		sstm << "Kinks local X Plane " <<  _sensorIDs.at(i);
+		histTitle = sstm.str();
+		sstm.str(std::string(""));
+		histoInfo = histoMgr->getHistogramInfo(residGblFitHistName);
+		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 500;
+		MinX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMin :-0.0005;
+		MaxX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMax : 0.0005;
+		AIDA::IHistogram1D * kinksX = marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D(residGblFitHistName, NBinX, MinX, MaxX); 
+
+		if (kinksX){
+				kinksX->setTitle(histTitle);
+				_mapKinksX.insert(std::make_pair(_sensorIDs.at(i), kinksX));
+		} else {
+				streamlog_out(ERROR2) << "Problem booking the " << (residGblFitHistName) << std::endl;
+				streamlog_out(ERROR2) << "Very likely a problem with path name. Switching off histogramming and continue w/o" << std::endl;
+		}
+		sstm.str(std::string(""));
+	}
+	for(size_t i = 0; i < _sensorIDs.size() ; ++i){
+		sstm << "KinkY" << _sensorIDs.at(i);
+		residGblFitHistName = sstm.str();
+		sstm.str(std::string());
+		sstm << "Kinks local Y Plane " <<  _sensorIDs.at(i);
+		histTitle = sstm.str();
+		sstm.str(std::string(""));
+		histoInfo = histoMgr->getHistogramInfo(residGblFitHistName);
+		NBinX = ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xBin : 500;
+		MinX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMin :-0.0005 ;
+		MaxX =  ( isHistoManagerAvailable && histoInfo ) ? histoInfo->_xMax : 0.0005;
+		AIDA::IHistogram1D * kinksY = marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D(residGblFitHistName, NBinX, MinX, MaxX); 
+
+		if (kinksY){
+				kinksY->setTitle(histTitle);
+				_mapKinksY.insert(std::make_pair(_sensorIDs.at(i), kinksY));
+		} else {
+				streamlog_out(ERROR2) << "Problem booking the " << (residGblFitHistName) << std::endl;
+				streamlog_out(ERROR2) << "Very likely a problem with path name. Switching off histogramming and continue w/o" << std::endl;
+		}
+		sstm.str(std::string(""));
+	}
+
+
+
 
 
 }

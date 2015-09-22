@@ -80,6 +80,7 @@ void EUTelMillepede::computeAlignmentGlobal( EUTelState &state){
     dmdg << 1 , 0,  0, 0,   relZ, -relY,
             0 ,  1,  0,-relZ,  0,    relX,
            0 ,   0,  1, relY, -relX, 0;
+
     Eigen::Matrix3d rot  =  geo::gGeometry().getRotMatrixEig(state.getLocation());
     Eigen::Matrix3d rotInv = rot.transpose();
     Eigen::MatrixXd gloMes = rotInv*drldm;
