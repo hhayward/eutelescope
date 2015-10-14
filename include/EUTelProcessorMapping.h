@@ -217,9 +217,8 @@ public:
      */
     void initializeGeometry( LCEvent * evt ) throw ( marlin::SkipEventException );
 
-    
-    void hitMapping( LCEvent * evt,  LCCollectionVec * unmappedCollection , LCCollectionVec * mappedCollection );
-    void hitMasking( LCEvent * evt,  LCCollectionVec * unmaskedCollection , LCCollectionVec * maskedCollection );
+    void hitMapping( LCEvent * evt,  LCCollectionVec * unmappedCollection , LCCollectionVec * mappedCollection, LCCollectionVec * maskedOutCollection, int DUTid );
+    void hitMasking( LCEvent * evt,  LCCollectionVec * maskedCollection, int DUTid );
 
 protected:
    
@@ -235,11 +234,15 @@ protected:
      *  collection.
      */
     std::string _unmappedCollectionName;
+    std::string _maskedCollectionName;
     std::string _mappedCollectionName;
+    std::string _maskedOutCollectionName;
 
     //! Pulse collection size
     size_t _initialUnmappedCollectionSize;
+    size_t _initialMaskedCollectionSize;
     size_t _initialMappedCollectionSize;
+    size_t _initialMaskedOutCollectionSize;
 
     //! Current run number.
     /*! This number is used to store the current run number
@@ -257,6 +260,14 @@ protected:
      *  histograms.
      */
     bool _fillHistos;
+    bool _doLargeClusterMaps;
+    bool _doMaskedOutPlots;
+
+    //! Masking step switch
+    /*! This boolean is used to switch on and off the readout channel
+     *  masking step.
+     */
+    bool _maskChannels;
 
     //! The histogram information file
     /*! This string contain the name of the histogram information
@@ -284,7 +295,11 @@ private:
      *  total number of clusters found on that sensor.
      *  The content of this map is show during end().
      */
-    std::map< int, int > _totClusterMap;
+    std::map< int, int > _totPixelMap;
+    std::map< int, int > _totPixelCheck;
+    std::map< int, int > _foundSelectedEvents;
+    std::map< int, int > _foundMaskedOutPixels;
+    std::map< int, std::vector<int> > _selectedEvents;
 
     //! The number of detectors
     /*! The number of sensors in the telescope. This is retrieve from
@@ -303,8 +318,26 @@ private:
     //! Map for pointer to Hit mapped histogram 
      std::map<int,AIDA::IBaseHistogram*> _mappedHistos;
 
+    //! Map for pointer to Hit mapped histogram 
+     std::map<int,AIDA::IBaseHistogram*> _maskedOutHistos;
+
+    //! Map for pointer to Hit mapped histogram 
+     std::map<int,AIDA::IBaseHistogram*> _maskedOutSpectrumHistos;
+
+    //! Map for pointer to Hit mapped histogram 
+     std::map<int,AIDA::IBaseHistogram*> _mappedSelectedEventsHistos;
+
+    //! Map for pointer to Hit mapped histogram 
+     std::map<int,AIDA::IBaseHistogram*> _maskedOutSelectedEventsHistos;
+
+    //! Map for pointer to Hit masked histogram 
+     std::map<int,AIDA::IBaseHistogram*> _maskedHistos;
+
     //! Map for pointer to Hit unmapped histogram 
      std::map<int,AIDA::IBaseHistogram*> _unmappedHistos;
+
+    //! Map for pointer to Hit unmapped histogram 
+     std::map<int,AIDA::IBaseHistogram*> _unmappedSelectedEventsHistos;
 
     //! Map for pointer to Event multiplicity histogram 
     std::map<int,AIDA::IBaseHistogram*> _eventMultiplicityHistos;
@@ -328,7 +361,9 @@ private:
     //! Zero Suppressed Data Collection
     LCCollectionVec *_zsInputDataCollectionVec;  
     LCCollectionVec* _unmappedCollectionVec;
+    LCCollectionVec* _maskedCollectionVec;
     LCCollectionVec* _mappedCollectionVec;
+    LCCollectionVec* _maskedOutCollectionVec;
   
 };
 
@@ -336,4 +371,3 @@ private:
 EUTelProcessorMapping gEUTelProcessorMapping;
 }
 #endif
-

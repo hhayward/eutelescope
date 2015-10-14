@@ -67,22 +67,37 @@ EUTelProcessorMapping::EUTelProcessorMapping():
   Processor("EUTelProcessorMapping"), 
   _zsDataCollectionName(""),
   _unmappedCollectionName(""),
+  _maskedCollectionName(""),
   _mappedCollectionName(""),
+  _maskedOutCollectionName(""),
   _initialUnmappedCollectionSize(0),
+  _initialMaskedCollectionSize(0),
   _initialMappedCollectionSize(0),
+  _initialMaskedOutCollectionSize(0),
   _iRun(0),
   _iEvt(0),
+  _maskChannels(false),
   _fillHistos(false),
+  _doLargeClusterMaps(false),
+  _doMaskedOutPlots(false),
   _histoInfoFileName(""),
   _noOfDetector(0),
   _ExcludedPlanes(),
   _unmappedHistos(),
+  _unmappedSelectedEventsHistos(),
+  _maskedOutSpectrumHistos(),
+  _maskedHistos(),
   _mappedHistos(),
+  _maskedOutHistos(),
+  _mappedSelectedEventsHistos(),
+  _maskedOutSelectedEventsHistos(),
   _eventMultiplicityHistos(),
   _sensorIDVec(),
   _zsInputDataCollectionVec(NULL),
   _unmappedCollectionVec(NULL),
-  _mappedCollectionVec(NULL)
+  _maskedCollectionVec(NULL),
+  _mappedCollectionVec(NULL),
+  _maskedOutCollectionVec(NULL)
  {
   
   // modify processor description
@@ -96,8 +111,14 @@ EUTelProcessorMapping::EUTelProcessorMapping():
   registerOutputCollection(LCIO::TRACKERDATA, "UnmappedCollectionName", "Unmapped (output) collection name",
                            _unmappedCollectionName, std::string("UnmappedHits"));
 
+  registerOutputCollection(LCIO::TRACKERDATA, "MaskedCollectionName", "Masked (output) collection name",
+                           _maskedCollectionName, std::string("maskedHits"));
+
   registerOutputCollection(LCIO::TRACKERDATA, "MappedCollectionName", "Mapped (output) collection name",
                            _mappedCollectionName, std::string("mappedHits"));
+
+  registerOutputCollection(LCIO::TRACKERDATA, "MaskedOutCollectionName", "MaskedOut (output) collection name",
+                           _maskedOutCollectionName, std::string("maskedOutHits"));
 
   // now the optional parameters
   registerOptionalParameter("DUTid", "The list of sensor ids for mapping",
@@ -118,8 +139,17 @@ EUTelProcessorMapping::EUTelProcessorMapping():
   registerProcessorParameter("HistogramFilling","Switch on or off the histogram filling",
     _fillHistos, static_cast< bool > ( true ) );
 
+  registerProcessorParameter("MaskingPlots","Switch on or off the channel masking plots",
+    _maskChannels, static_cast< bool > ( false ) );
+
   registerOptionalParameter("ExcludedPlanes", "The list of sensor ids that have to be excluded from the clustering.",
                              _ExcludedPlanes, std::vector<int> () );
+
+  registerOptionalParameter("LargeClusterPlots", "Switch on or off maps of large (>100 pixels) cluster events.",
+                             _doLargeClusterMaps, static_cast< bool > ( false ) );
+
+  registerOptionalParameter("UnusedChannelPlots", "Switch on or off plots for unused pixels (from 167x125um**2)",
+                             _doMaskedOutPlots, static_cast< bool > ( false ) );
 
   		_isFirstEvent = true;
 }
@@ -158,17 +188,24 @@ void EUTelProcessorMapping::initializeGeometry( LCEvent * event ) throw ( marlin
 
 	streamlog_out( DEBUG5 ) << "Initializing geometry" << std::endl;
 
+	for(int d=0; d<_DUTid.size(); d++){
+	  _totPixelMap.insert( std::make_pair( _DUTid.at(d), 0) );
+	  _totPixelCheck.insert( std::make_pair( _DUTid.at(d), 0) );
+	  _foundSelectedEvents.insert( std::make_pair( _DUTid.at(d), 0) );
+	  _foundMaskedOutPixels.insert( std::make_pair( _DUTid.at(d), 0) );
+	  _noOfDetector++;
+	}
+
   	try 
   	{
 		_zsInputDataCollectionVec = dynamic_cast<LCCollectionVec*>( event->getCollection(_zsDataCollectionName) );
-		_noOfDetector += _zsInputDataCollectionVec->getNumberOfElements();
+		//_noOfDetector += _zsInputDataCollectionVec->getNumberOfElements();
 		CellIDDecoder<TrackerDataImpl> cellDecoder(_zsInputDataCollectionVec);
 
 		for ( size_t i = 0; i < _zsInputDataCollectionVec->size(); ++i ) 
 		{
 			TrackerDataImpl * data = dynamic_cast< TrackerDataImpl * > ( _zsInputDataCollectionVec->getElementAt( i ) ) ;
 			_sensorIDVec.push_back( cellDecoder(data)["sensorID"] );
-			_totClusterMap.insert( std::make_pair( cellDecoder(data)["sensorID"], 0) );
 		}
 	} 
 
@@ -244,11 +281,17 @@ void EUTelProcessorMapping::processEvent (LCEvent * event)
 
 	// prepare a collection of mapped hits can be either a new collection or already existing in the event
 	LCCollectionVec* unmappedCollection;
+	LCCollectionVec* maskedCollection;
 	LCCollectionVec* mappedCollection;
+	LCCollectionVec* maskedOutCollection;
 	bool unmappedCollectionExists = false;
+	bool maskedCollectionExists = false;
 	bool mappedCollectionExists = false;
+	bool maskedOutCollectionExists = false;
 	_initialUnmappedCollectionSize = 0;
+	_initialMaskedCollectionSize = 0;
 	_initialMappedCollectionSize = 0;
+	_initialMaskedOutCollectionSize = 0;
 	try 
 	{
 		unmappedCollection = dynamic_cast< LCCollectionVec * > ( evt->getCollection( _unmappedCollectionName ) );
@@ -262,6 +305,17 @@ void EUTelProcessorMapping::processEvent (LCEvent * event)
 
 	try 
 	{
+		maskedCollection = dynamic_cast< LCCollectionVec * > ( evt->getCollection( _maskedCollectionName ) );
+		maskedCollectionExists = true;
+		_initialMaskedCollectionSize = maskedCollection->size();
+	} 
+	catch ( lcio::DataNotAvailableException& e ) 
+	{
+	  maskedCollection = new LCCollectionVec(LCIO::TRACKERDATA);
+	}
+
+	try 
+	{
 		mappedCollection = dynamic_cast< LCCollectionVec * > ( evt->getCollection( _mappedCollectionName ) );
 		mappedCollectionExists = true;
 		_initialMappedCollectionSize = mappedCollection->size();
@@ -270,39 +324,58 @@ void EUTelProcessorMapping::processEvent (LCEvent * event)
 	{
 	  mappedCollection = new LCCollectionVec(LCIO::TRACKERDATA);
 	}
+
+	try 
+	{
+		maskedOutCollection = dynamic_cast< LCCollectionVec * > ( evt->getCollection( _maskedOutCollectionName ) );
+		maskedOutCollectionExists = true;
+		_initialMappedCollectionSize = maskedOutCollection->size();
+	} 
+	catch ( lcio::DataNotAvailableException& e ) 
+	{
+	  maskedOutCollection = new LCCollectionVec(LCIO::TRACKERDATA);
+	}
   
+
+	//HERE WE ACTUALLY CALL THE MASKING ROUTINE:
+	if ( _maskChannels ) {
+	  for(int d=0; d<_DUTid.size();d++){
+	    hitMasking(evt, maskedCollection, _DUTid.at(d));
+	  }
+	}
+
 	//HERE WE ACTUALLY CALL THE MAPPING ROUTINE:
-	hitMapping(evt, unmappedCollection, mappedCollection);
+	for(int d=0; d<_DUTid.size();d++){
+	  hitMapping(evt, unmappedCollection, mappedCollection, maskedOutCollection, _DUTid.at(d));
+	}
 
 	// if the dataCollection is not empty add it to the event
 	if ( ! unmappedCollectionExists && ( unmappedCollection->size() != _initialUnmappedCollectionSize )) 
-	{
-		evt->addCollection( unmappedCollection, _unmappedCollectionName );
-	}
-
+	{		evt->addCollection( unmappedCollection, _unmappedCollectionName );	}
+	if ( ! maskedCollectionExists && ( maskedCollection->size() != _initialMaskedCollectionSize )) 
+	{		evt->addCollection( maskedCollection, _maskedCollectionName );	}
 	if ( ! mappedCollectionExists && ( mappedCollection->size() != _initialMappedCollectionSize )) 
-	{
-		evt->addCollection( mappedCollection, _mappedCollectionName );
-	}
+	{		evt->addCollection( mappedCollection, _mappedCollectionName );	}
+	if ( ! maskedOutCollectionExists && ( maskedOutCollection->size() != _initialMaskedOutCollectionSize )) 
+	{		evt->addCollection( maskedOutCollection, _maskedOutCollectionName );	}
   
 #if defined(USE_AIDA) || defined(MARLIN_USE_AIDA)
 	fillHistos(evt);
 #endif
 
 	if ( ! unmappedCollectionExists && ( unmappedCollection->size() == _initialUnmappedCollectionSize ) ) 
-	{
-		delete unmappedCollection;
-	}
-
+	{		delete unmappedCollection;	}
+	if ( ! maskedCollectionExists && ( maskedCollection->size() == _initialMaskedCollectionSize ) ) 
+	{		delete maskedCollection;	}
 	if ( ! mappedCollectionExists && ( mappedCollection->size() == _initialMappedCollectionSize ) ) 
-	{
-		delete mappedCollection;
-	}
+	{		delete mappedCollection;	}
+	if ( ! maskedOutCollectionExists && ( maskedOutCollection->size() == _initialMaskedOutCollectionSize ) ) 
+	{		delete maskedOutCollection;	}
 
 	_isFirstEvent = false;
 }
 
-void EUTelProcessorMapping::hitMapping( LCEvent * evt , LCCollectionVec * unmappedCollection, LCCollectionVec * mappedCollection) 
+void EUTelProcessorMapping::hitMasking( LCEvent * evt , LCCollectionVec * maskedCollection, int DUTid) 
 {
 	// prepare some decoders
   CellIDDecoder<TrackerDataImpl> cellDecoder( _zsInputDataCollectionVec );
@@ -345,15 +418,174 @@ void EUTelProcessorMapping::hitMapping( LCEvent * evt , LCCollectionVec * unmapp
       
       int nRow=-1, nCol=-1;
       bool foundDUT=false;
-      //find mapping but identifying DUT number and hence corrsponding Pix array (by ordered input vectors)
+      //find mapping by identifying DUT number and hence corrsponding Pix array (by ordered input vectors)
       for(size_t id= 0; id < _DUTid.size(); id++){
-	if(sensorID==_DUTid[id]){
+	if(_DUTid[id]==DUTid){
 	  foundDUT=true;
 	  nRow=_nPixY[id];
 	  nCol=_nPixX[id];
+	  streamlog_out ( DEBUG2 ) << "identified DUTid "<<DUTid<<" with  _DUTid " << std::endl;
 	}
       }
-      if(!foundDUT){ nRow=336; nCol=80; } //if nothing found go to defailt FEI4 set-up
+      if(!foundDUT){ nRow=336; nCol=80; 
+	streamlog_out ( DEBUG2 ) << "could not identify DUTid " << DUTid << std::endl; 
+      }
+      //check with sensorID that this is appropriate
+      if(sensorID%10!=DUTid%10){
+	  foundDUT=false;
+	  streamlog_out ( DEBUG2 ) << "Sensor id " << sensorID << " does not match DUTid "<<DUTid<< std::endl; 
+      }
+      if(!foundDUT){
+	streamlog_out ( DEBUG2 ) << "Skipping sensor id " << sensorID << std::endl; 
+	continue;
+      }
+      
+      if ( type == kEUTelGenericSparsePixel ) 
+	{
+	  
+	  // now prepare the EUTelescope interface to sparsified data.
+	  std::auto_ptr<EUTelTrackerDataInterfacerImpl<EUTelGenericSparsePixel > > sparseData( new EUTelTrackerDataInterfacerImpl<EUTelGenericSparsePixel> ( zsData ) );
+	  
+	  streamlog_out ( DEBUG2 ) << "Processing sparse data on detector " << sensorID << " with " << sparseData->size() << " pixels " << std::endl;
+	  
+	  int hitPixelsInEvent = sparseData->size();
+	  
+	  //	create cell encoders to set sensorID and pixel type
+	  CellIDEncoder< TrackerDataImpl > zsMaskedDataEncoder   ( eutelescope::EUTELESCOPE::ZSDATADEFAULTENCODING, maskedCollection  );
+	  // prepare a new TrackerData object for the ZS data
+	  // it contains all the hits for a particular sensor in one event
+	  std::auto_ptr<lcio::TrackerDataImpl > zsMaskedFrame( new lcio::TrackerDataImpl );
+	  zsMaskedDataEncoder["sensorID"] = DUTid;
+	  zsMaskedDataEncoder["sparsePixelType"] = eutelescope::kEUTelGenericSparsePixel;
+	  // set some values of "Cells" for this object
+	  zsMaskedDataEncoder.setCellID( zsMaskedFrame.get() );
+	  std::auto_ptr< eutelescope::EUTelTrackerDataInterfacerImpl< eutelescope::EUTelGenericSparsePixel > >
+	    sparseMaskedFrame( new eutelescope::EUTelTrackerDataInterfacerImpl< eutelescope::EUTelGenericSparsePixel > ( zsMaskedFrame.get() ) );
+	  EUTelGenericSparsePixel* genericPixel = new EUTelGenericSparsePixel;
+	  
+	  //This for-loop loads all the hits of the given event and detector plane and stores them 
+	  for(int i = 0; i < hitPixelsInEvent; ++i )
+	    {
+	      //Load the information of the hit pixel into genericPixel
+	      sparseData->getSparsePixelAt( i, genericPixel );		
+	      
+	      //Now we need to process the pixel
+	      if ( genericPixel ) 
+		{
+
+		  // get the cluster size in X and Y separately and plot it:
+		  int xPos= genericPixel->getXCoord(); int yPos=genericPixel->getYCoord();
+		  int row = yPos, col = xPos;
+		  // MASKING SECTION//
+
+
+
+		  if(nCol==120 && nRow==136){ //example mapping for 167x125 device (not universally applicable!)
+		    
+		    if(DUTid==30){ // specific to CPV 167x125 device readout (offset 1)
+		      if( (col%4==1 || col%4==2) && (row%5==2 || row%5==0) ){ continue; } //no 6s or 9s
+		      if( (col%4==0 || col%4==3) && (row%5==3 || row%5==0) ){ continue; } //no 2s or 4s
+		    }
+		    else if(DUTid==40){ // specific to CPV 167x125 device readout (offset 2)
+		      if( (col%4==1 || col%4==2) && (row%5==3 || row%5==1) ){ continue; } //no 6s or 9s
+		      if( (col%4==0 || col%4==3) && (row%5==4 || row%5==1) ){ continue; } //no 2s or 4s
+		    }
+		    else if(DUTid==50){ // specific to CPV 167x125 device readout (offset 3)
+		      if( (col%4==1 || col%4==2) && (row%5==4 || row%5==2) ){ continue; } //no 6s or 9s
+		      if( (col%4==0 || col%4==3) && (row%5==0 || row%5==2) ){ continue; } //no 2s or 4s
+		    }	  
+		    else if(DUTid==60||DUTid==62){ // specific to CPV 167x125 device readout (offset 4)
+		      if( (col%4==1 || col%4==2) && (row%5==0 || row%5==3) ){ continue; } //no 6s or 9s
+		      if( (col%4==0 || col%4==3) && (row%5==1 || row%5==3) ){ continue; } //no 2s or 4s
+		    }	  
+		    else if(DUTid==70||DUTid==72){ // specific to CPV 167x125 device readout (offset 4)
+		      if( (col%4==1 || col%4==2) && (row%5==0 || row%5==3) ){ continue; } //no 6s or 9s
+		      if( (col%4==0 || col%4==3) && (row%5==1 || row%5==3) ){ continue; } //no 2s or 4s
+		    }	  
+		    else if(DUTid==20||DUTid==22){ // specific to CPV 167x125 device readout (offset 4)
+		      if( (col%4==1 || col%4==2) && (row%5==0 || row%5==3) ){ continue; } //no 6s or 9s
+		      if( (col%4==0 || col%4==3) && (row%5==1 || row%5==3) ){ continue; } //no 2s or 4s
+		    }
+		  }
+		  // add editted pixel to mapped pixel map
+		  sparseMaskedFrame->addSparsePixel( genericPixel );
+		  
+		  streamlog_out ( DEBUG2 ) << "storing masked pixels ("<<DUTid <<")" << genericPixel->getXCoord() <<", " << genericPixel->getYCoord() << std::endl;
+
+		}
+	    }
+	  
+	  // write TrackerData object that contains info from one sensor to LCIO collection
+	  maskedCollection->push_back( zsMaskedFrame.release() );
+	  
+	}
+    } 
+} 
+
+void EUTelProcessorMapping::hitMapping( LCEvent * evt , LCCollectionVec * unmappedCollection, LCCollectionVec * mappedCollection, LCCollectionVec * maskedOutCollection, int DUTid) 
+{
+	// prepare some decoders
+  CellIDDecoder<TrackerDataImpl> cellDecoder( _zsInputDataCollectionVec );
+
+  bool isDummyAlreadyExisting = false;
+  LCCollectionVec* sparsePixelCollectionVec = NULL;
+  
+  try 
+    {
+      sparsePixelCollectionVec = dynamic_cast< LCCollectionVec* > ( evt->getCollection( "original_zsdata") );
+      isDummyAlreadyExisting = true ;
+    } 
+  catch (lcio::DataNotAvailableException& e) 
+    {
+      sparsePixelCollectionVec =  new LCCollectionVec(LCIO::TRACKERDATA);
+      isDummyAlreadyExisting = false;
+    }
+  
+  for ( unsigned int idetector = 0 ; idetector < _zsInputDataCollectionVec->size(); idetector++ ) 
+    {
+      // get the TrackerData and guess which kind of sparsified data it contains.
+      TrackerDataImpl * zsData = dynamic_cast< TrackerDataImpl * > ( _zsInputDataCollectionVec->getElementAt( idetector ) );
+      SparsePixelType   type   = static_cast<SparsePixelType> ( static_cast<int> (cellDecoder( zsData )["sparsePixelType"]) );
+      int sensorID             = static_cast<int > ( cellDecoder( zsData )["sensorID"] );
+
+      //if this is an excluded sensor go to the next element
+      bool foundexcludedsensor = false;
+      for(size_t iexclude = 0; iexclude < _ExcludedPlanes.size(); ++iexclude)
+	{
+	  if(_ExcludedPlanes[iexclude] == sensorID)
+	    {
+	      foundexcludedsensor = true;
+	    }
+	}
+      
+      if(foundexcludedsensor)       
+	{		
+	  continue;
+	}
+      
+      int nRow=-1, nCol=-1;
+      bool foundDUT=false;
+      //find mapping by identifying DUT number and hence corrsponding Pix array (by ordered input vectors)
+      for(size_t id= 0; id < _DUTid.size(); id++){
+	if(_DUTid[id]==DUTid){
+	  foundDUT=true;
+	  nRow=_nPixY[id];
+	  nCol=_nPixX[id];
+	  streamlog_out ( DEBUG2 ) << "identified DUTid "<<DUTid<<" with  _DUTid " << _DUTid[id] << ": " <<nCol<<"x"<<nRow<< std::endl;
+	}
+      }
+      if(!foundDUT){ nRow=336; nCol=80; 
+	streamlog_out ( DEBUG2 ) << "could not identify DUTid " << DUTid << ". Standard geometry used"<< std::endl; 
+      }
+      //check with sensorID that this is appropriate
+      if(sensorID%10!=DUTid%10){
+	  foundDUT=false;
+	  streamlog_out ( DEBUG2 ) << "Sensor id " << sensorID << " does not match DUTid "<<DUTid<< std::endl; 
+      }
+      if(!foundDUT){
+	streamlog_out ( DEBUG2 ) << "Skipping sensor id " << sensorID << std::endl; 
+	continue;
+      }
       
       if ( type == kEUTelGenericSparsePixel ) 
 	{
@@ -368,22 +600,35 @@ void EUTelProcessorMapping::hitMapping( LCEvent * evt , LCCollectionVec * unmapp
 	  //	create cell encoders to set sensorID and pixel type
 	  CellIDEncoder< TrackerDataImpl > zsUnmappedDataEncoder   ( eutelescope::EUTELESCOPE::ZSDATADEFAULTENCODING, unmappedCollection  );
 	  std::auto_ptr<lcio::TrackerDataImpl > zsUnmappedFrame( new lcio::TrackerDataImpl );
-	  zsUnmappedDataEncoder["sensorID"] = sensorID;
+	  zsUnmappedDataEncoder["sensorID"] = DUTid;
 	  zsUnmappedDataEncoder["sparsePixelType"] = eutelescope::kEUTelGenericSparsePixel;
 	  zsUnmappedDataEncoder.setCellID( zsUnmappedFrame.get() );
 	  //	create cell encoders to set sensorID and pixel type
+	  std::auto_ptr< eutelescope::EUTelTrackerDataInterfacerImpl< eutelescope::EUTelGenericSparsePixel > >
+	    sparseUnmappedFrame( new eutelescope::EUTelTrackerDataInterfacerImpl< eutelescope::EUTelGenericSparsePixel > ( zsUnmappedFrame.get() ) );
+
 	  CellIDEncoder< TrackerDataImpl > zsMappedDataEncoder   ( eutelescope::EUTELESCOPE::ZSDATADEFAULTENCODING, mappedCollection  );
 	  // prepare a new TrackerData object for the ZS data
 	  // it contains all the hits for a particular sensor in one event
 	  std::auto_ptr<lcio::TrackerDataImpl > zsMappedFrame( new lcio::TrackerDataImpl );
-	  zsMappedDataEncoder["sensorID"] = sensorID;
+	  zsMappedDataEncoder["sensorID"] = DUTid;
 	  zsMappedDataEncoder["sparsePixelType"] = eutelescope::kEUTelGenericSparsePixel;
 	  // set some values of "Cells" for this object
 	  zsMappedDataEncoder.setCellID( zsMappedFrame.get() );
 	  std::auto_ptr< eutelescope::EUTelTrackerDataInterfacerImpl< eutelescope::EUTelGenericSparsePixel > >
-	    sparseUnmappedFrame( new eutelescope::EUTelTrackerDataInterfacerImpl< eutelescope::EUTelGenericSparsePixel > ( zsUnmappedFrame.get() ) );
-	  std::auto_ptr< eutelescope::EUTelTrackerDataInterfacerImpl< eutelescope::EUTelGenericSparsePixel > >
 	    sparseMappedFrame( new eutelescope::EUTelTrackerDataInterfacerImpl< eutelescope::EUTelGenericSparsePixel > ( zsMappedFrame.get() ) );
+
+	  CellIDEncoder< TrackerDataImpl > zsMaskedOutDataEncoder   ( eutelescope::EUTELESCOPE::ZSDATADEFAULTENCODING, maskedOutCollection  );
+	  // prepare a new TrackerData object for the ZS data
+	  // it contains all the hits for a particular sensor in one event
+	  std::auto_ptr<lcio::TrackerDataImpl > zsMaskedOutFrame( new lcio::TrackerDataImpl );
+	  zsMaskedOutDataEncoder["sensorID"] = DUTid;
+	  zsMaskedOutDataEncoder["sparsePixelType"] = eutelescope::kEUTelGenericSparsePixel;
+	  // set some values of "Cells" for this object
+	  zsMaskedOutDataEncoder.setCellID( zsMaskedOutFrame.get() );
+	  std::auto_ptr< eutelescope::EUTelTrackerDataInterfacerImpl< eutelescope::EUTelGenericSparsePixel > >
+	    sparseMaskedOutFrame( new eutelescope::EUTelTrackerDataInterfacerImpl< eutelescope::EUTelGenericSparsePixel > ( zsMaskedOutFrame.get() ) );
+
 	  EUTelGenericSparsePixel* genericPixel = new EUTelGenericSparsePixel;
 	  EUTelGenericSparsePixel* genericMappedPixel = new EUTelGenericSparsePixel;
 	  
@@ -396,107 +641,143 @@ void EUTelProcessorMapping::hitMapping( LCEvent * evt , LCCollectionVec * unmapp
 	      //Now we need to process the pixel
 	      if ( genericPixel ) 
 		{
-		  
+		  //save the data to unmapped pixel map
+		  sparseUnmappedFrame->addSparsePixel( genericPixel );
+
 		  // get the cluster size in X and Y separately and plot it:
 		  int xPos= genericPixel->getXCoord(); int yPos=genericPixel->getYCoord();
 		  int row = yPos, col = xPos;
 		  // MAPPING SECTION//
 		  int geoRow=-1, geoCol=-1;
-
-		  if(nCol==40 && nRow==672){
-		    streamlog_out ( DEBUG2 ) << "recognise mapping " << sensorID << std::endl;
-		    if(col%2==1){
-		      geoRow=row*2/1;
-		      geoCol=(col-1)*1/2;
-		    }
-		    else{
-		      geoRow=row*2/1 +1;
-		      geoCol=(col)*1/2;
-		    }
+		  bool maskedOut=false;
 		  
-		   // streamlog_out ( DEBUG2 ) << "original x,y " << col << "," <<row <<std::endl;
-		   // streamlog_out ( DEBUG2 ) << "new x,y " << geoCol << "," << geoRow <<std::endl;
-		    
-		    }
-
-		  /*if(nCol==40 && nRow==672){
-		    streamlog_out ( DEBUG2 ) << "recognise mapping " << sensorID << std::endl;
-		    if(col%2==1){
-		      geoRow=row*2/1 +1;
-		      geoCol=(col-1)*1/2;
-		    }
-		    else{
-		      geoRow=row*2/1;
-		      geoCol=(col)*1/2;
-		    }
-
-		  }*/
-		  
-		  else if(nCol==120 && nRow==134){ //example mapping for 167x125 device (not universally applicable!)
-		    if( (col%4==0 || col%4==3) && (row%5==1 || row%5==3) ){ continue; }
+		  if(nCol==40 && nRow==672){ //mapping for UK 500x25 device (not universally applicable!)
 		    if(col%2==0){
-		      geoCol=col*3/2; //cout<<"geoCol: "<<geoCol<<endl;
+		      geoRow=row*2/1 +1;
+		      geoCol=(col)*1/2;
 		    }
 		    else{
-		      geoCol=(col*3 +1)/2;
+		      geoRow=row*2/1;
+		      geoCol=(col-1)*1/2; 
 		    }
-		    
-		    if(col%4==1 || col%4==2){
-		      if(row%5==2){
-			geoRow=(row-2)*2/5;
-			geoCol=geoCol;
-		      }
-		      else if(row%5==4){
-			geoRow=(row*2 -3)/5;
-			geoCol=geoCol;
-		      }
-		      else if(row%5==1){
-			geoRow=(row*2+3)/5;
-			if(col%4==1){
-			  geoCol=(col*3 -1)/2;
+		  }
+		  else if(nCol==120 && (nRow==136 ||nRow==134 )){ //mapping for UK 167x125 device (not universally applicable!)
+		    // specific to CPV 167x125 device readout (offset 4)
+		    if( (col%4==1 || col%4==2) && (row%5==0 || row%5==3) ){ maskedOut=true; } //no 6s or 9s
+		    if( (col%4==0 || col%4==3) && (row%5==1 || row%5==3) ){ maskedOut=true; } //no 2s or 4s
+		    if(!maskedOut){
+		      if(col%4==0 || col%4==3){ // 0-4 columns
+			if(row%5==4){ //row 0s
+			  geoRow=(row*2 +2)/5;
+			  if(col%4==0){
+			    geoCol=col*3/2;
+			    }
+			  else if(col%4==3){
+			    geoCol=(col*3 +1)/2;
+			  }
 			}
-			else if(col%4==2){
-			  geoCol=col*3/2 +1;
+			else if(row%5==0){ //row 1s (drop 2)
+			  geoRow=(row*2)/5 ;
+			  if(col%4==0){
+			    geoCol=(col*3 +2)/2;
+			  }
+			  else if(col%4==3){
+			    geoCol=(col*3 -1)/2;
+			  }
+			}
+			else if(row%5==2){ // row 3s
+			  geoRow=(row*2 +1)/5 ;
+			  if(col%4==0){
+			    geoCol=col*3/2;
+			  }
+			  else if(col%4==3){
+			    geoCol=(col*3 +1)/2;
+			    }
+			}
+		      }
+		      if(col%4==1 || col%4==2){ // 5-9 columns
+			if(row%5==4){ //row 5s (drop 1)
+			  geoRow=(row*2 +2)/5 ;
+			  if(col%4==1){
+			    geoCol=(col*3 +1)/2;
+			  }
+			  else if(col%4==2){
+			    geoCol=col*3/2;
+			  }
+			}
+			else if(row%5==1){ //row 7s (drop 2)
+			  geoRow=(row*2 +3)/5 ;
+			  if(col%4==1){
+			    geoCol=(col*3 -1)/2;
+			  }
+			  else if(col%4==2){
+			    geoCol=(col*3 +2)/2;
+			  }
+			}
+			else if(row%5==2){ //row 8s (drop 3)
+			  geoRow=(row*2 +1)/5 ;
+			  if(col%4==1){
+			    geoCol=(col*3 +1)/2;
+			  }
+			  else if(col%4==2){
+			    geoCol=col*3/2;
+			  }
 			}
 		      }
 		    }
-		    if(col%4==0 || col%4==3){
-		      if(row%5==2){
-			geoRow=(row-2)*2/5 ;
-			geoCol=geoCol;
-		      }
-		      else if(row%5==4){
-			geoRow=(row*2 -3)/5;
-			geoCol=geoCol;
-		      }
-		      else if(row%5==0){
-			geoRow=row*2/5;
-			if(col%4==3){
-			  geoCol=(col*3 -1)/2;
-			}
-			else if(col%4==0){
-			  geoCol=col*3/2 +1;
-			}
-		      }
+		  }	
+		  else if(nCol==160 && nRow==168){ //mapping for UK 125x100 device (not universally applicable!)
+		    if(row%4==0){
+		      geoRow=row*1/2;
+		      if(col%2==0){ geoCol=col*2/1 ; }
+		      if(col%2==1){ geoCol=col*2/1 +1; }
+		    }
+		    if(row%4==1){
+		      geoRow=(row-1)*1/2;
+		      if(col%2==0){ geoCol=col*2/1 +1; }
+		      if(col%2==1){ geoCol=col*2/1 ; }
+		    }
+		    if(row%4==2){
+		      geoRow=(row)*1/2;
+		      if(col%2==0){ geoCol=col*2/1 +1; }
+		      if(col%2==1){ geoCol=col*2/1 ; }
+		    }
+		    if(row%4==3){
+		      geoRow=(row-1)*1/2;
+		      if(col%2==0){ geoCol=col*2/1 ; }
+		      if(col%2==1){ geoCol=col*2/1 +1; }
 		    }
 		  }
 		  else{ geoRow=row; geoCol=col; }
 		  
-		  sparseData->getSparsePixelAt( i, genericMappedPixel );	
-		  genericMappedPixel->setXCoord(geoCol);
-		  genericMappedPixel->setYCoord(geoRow);
-		  sparseUnmappedFrame->addSparsePixel( genericPixel );
-		  sparseMappedFrame->addSparsePixel( genericMappedPixel );
-		  
-		  streamlog_out ( DEBUG2 ) << "storing unmapped pixels " << genericPixel->getXCoord() <<", " << genericPixel->getYCoord() << std::endl;	  
-		  streamlog_out ( DEBUG2 ) << "storing mapped pixels " << genericMappedPixel->getXCoord() <<", " << genericMappedPixel->getYCoord() << std::endl;
-
+		  if(maskedOut ){ geoRow=row; geoCol=col; }
+		  // get data pixel for mapping coordinates
+		    sparseData->getSparsePixelAt( i, genericMappedPixel );	
+		    genericMappedPixel->setXCoord(geoCol);
+		    genericMappedPixel->setYCoord(geoRow);
+		    // add editted pixel to mapped pixel map
+		    
+		    if(maskedOut ){
+		      sparseMaskedOutFrame->addSparsePixel( genericMappedPixel );	  
+		      streamlog_out ( DEBUG2 ) << "storing maskedout pixels ("<<DUTid <<")" << genericMappedPixel->getXCoord() <<", " << genericMappedPixel->getYCoord() << std::endl;
+		_foundMaskedOutPixels[DUTid] += 1;
+		    }
+		    else{
+		      sparseMappedFrame->addSparsePixel( genericMappedPixel );	  
+		      streamlog_out ( DEBUG2 ) << "storing mapped pixels ("<<DUTid <<")" << genericMappedPixel->getXCoord() <<", " << genericMappedPixel->getYCoord() << std::endl;
+		    }
+		    
+		    streamlog_out ( DEBUG2 ) << "storing unmapped pixels ("<<DUTid <<") " << genericPixel->getXCoord() <<", " << genericPixel->getYCoord() << std::endl;
+		    
+		    // last but not least increment the totClusterMap
+		    _totPixelMap[ DUTid ] += 1;
 		}
 	    }
 	  
 	  // write TrackerData object that contains info from one sensor to LCIO collection
 	  unmappedCollection->push_back( zsUnmappedFrame.release() );
 	  mappedCollection->push_back( zsMappedFrame.release() );
+	  maskedOutCollection->push_back( zsMaskedOutFrame.release() );
 	  
 	}
     } 
@@ -507,7 +788,33 @@ void EUTelProcessorMapping::check (LCEvent * /* evt */) {
 }
 
 void EUTelProcessorMapping::end() {
-	
+  
+	std::map<int,int>::iterator iter = _totPixelMap.begin();
+	while( iter != _totPixelMap.end() )
+	{
+		streamlog_out ( MESSAGE4 ) << "Found " << iter->second << " pixels on detector " << iter->first << std::endl;
+		++iter;
+	}
+	iter = _totPixelCheck.begin();
+	while( iter != _totPixelCheck.end() )
+	{
+		streamlog_out ( MESSAGE4 ) << "Found " << iter->second << " check on detector " << iter->first << std::endl;
+		++iter;
+	}
+	iter = _foundSelectedEvents.begin();
+	while( iter != _foundSelectedEvents.end() )
+	{
+		streamlog_out ( MESSAGE4 ) << "Found " << iter->second << " selected events on detector " << iter->first << std::endl;
+		++iter;
+	}
+	if(_doMaskedOutPlots){
+	  iter = _foundMaskedOutPixels.begin();
+	  while( iter != _foundMaskedOutPixels.end() )
+	    {
+	      streamlog_out ( MESSAGE4 ) << "Found " << iter->second << " masked out pixels on detector " << iter->first << std::endl;
+		++iter;
+	    }
+	}
 	streamlog_out ( MESSAGE4 ) <<  "Successfully finished" << std::endl;
 }
 
@@ -517,6 +824,7 @@ void EUTelProcessorMapping::fillHistos (LCEvent * evt)
   EUTelEventImpl* eutelEvent = static_cast<EUTelEventImpl*> (evt);
   EventType type = eutelEvent->getEventType();
   
+
   if ( type == kEORE ) 
     {
       streamlog_out ( DEBUG4 ) << "EORE found: nothing else to do." << std::endl;
@@ -530,81 +838,8 @@ void EUTelProcessorMapping::fillHistos (LCEvent * evt)
       // correct, so no harm to continue...
     }
   
-  try 
-    { //MAPPED Plots
-      LCCollectionVec* _mappedCollectionVec = dynamic_cast<LCCollectionVec*>  (evt->getCollection(_mappedCollectionName));
-      CellIDDecoder<TrackerDataImpl > cellDecoder(_mappedCollectionVec);
-      
-      std::map<int, int> eventCounterMap;
-      
-	for ( unsigned int idetector = 0 ; idetector < _zsInputDataCollectionVec->size(); idetector++ ) 
-	{
-	  TrackerDataImpl* hits = dynamic_cast<TrackerDataImpl*> ( _mappedCollectionVec->getElementAt(idetector) );
-	  SparsePixelType type  = static_cast<SparsePixelType> ( static_cast<int> ( cellDecoder(hits)["sparsePixelType"] ));
-	  int detectorID = static_cast<int>( cellDecoder(hits)["sensorID"] );
-	  	  
-	  if( type == kEUTelGenericSparsePixel ) {
+  bool selected=false;// make true if >100 hit pixels in event
 
-	    //if this key doesn't exist yet it will be value initialized, this is desired, for int this is 0!
-	    eventCounterMap[detectorID]++;
-	    
-	    //if this is an excluded sensor go to the next element
-	    bool foundexcludedsensor = false;
-	    for(size_t i = 0; i < _ExcludedPlanes.size(); ++i)
-	      {
-		if(_ExcludedPlanes[i] == detectorID)
-		  {
-		    foundexcludedsensor = true;
-		    break;
-		  }
-	      }
-	    if(foundexcludedsensor){ continue; }
-	    // now prepare the EUTelescope interface to sparsified data.
-	    std::auto_ptr<EUTelTrackerDataInterfacerImpl<EUTelGenericSparsePixel > > hitData( new EUTelTrackerDataInterfacerImpl<EUTelGenericSparsePixel> ( hits ) );
-	    streamlog_out ( DEBUG2 ) << "Processing hits for mapping on detector " << detectorID << " with " << hitData->size() << " pixels " << std::endl;
-	    
-	    int hitPixelsInEvent = hitData->size();
-	    EUTelGenericSparsePixel* genericPixel = new EUTelGenericSparsePixel;
-	    
-	    //This for-loop loads all the hits of the given event and detector plane and stores them as GeometricPixels
-	    for(int i = 0; i < hitPixelsInEvent; ++i )
-	      {
-		//Load the information of the hit pixel into genericPixel
-		hitData->getSparsePixelAt( i, genericPixel );
-		
-		// get the cluster size in X and Y separately and plot it:
-		int xPos= genericPixel->getXCoord();
-		int yPos= genericPixel->getYCoord();
-		
-		streamlog_out ( DEBUG2 ) << "mapped hits_" <<i<<" : "<< xPos<< ", "<<yPos<<std::endl;
-		//Do all the plots
-		(dynamic_cast<AIDA::IHistogram2D*> (_mappedHistos[detectorID]))->fill(static_cast<double >(xPos), static_cast<double >(yPos), 1.);
-	      }
-		delete genericPixel;
-	  }
-	  else 
-	    {
-	      streamlog_out ( ERROR4 ) <<  "Unknown pixel type:" << type <<std::endl;
-	      throw UnknownDataTypeException("Pixel type unknown");
-	    }	
-	}
-	 
-	//fill the event multiplicity here
-	std::string tempHistoName;
-	for ( int iDetector = 0; iDetector < _noOfDetector; iDetector++ ) 
-	  {
-	    AIDA::IHistogram1D * histo = dynamic_cast<AIDA::IHistogram1D*> ( _eventMultiplicityHistos[_sensorIDVec.at( iDetector)] );
-	    if ( histo ) 
-	      {
-		histo->fill( eventCounterMap[_sensorIDVec.at( iDetector)] );
-	      }
-	  }
-    }
-  catch (lcio::DataNotAvailableException& e) 
-    {
-      return;
-    }
-  
   try 
     { // UNMAPPED plots
       LCCollectionVec* _unmappedCollectionVec = dynamic_cast<LCCollectionVec*>  (evt->getCollection(_unmappedCollectionName));
@@ -612,7 +847,7 @@ void EUTelProcessorMapping::fillHistos (LCEvent * evt)
       
       std::map<int, int> eventCounterMap;
       
-	for ( unsigned int idetector = 0 ; idetector < _zsInputDataCollectionVec->size(); idetector++ ) 
+	for ( unsigned int idetector = 0 ; idetector < _DUTid.size(); idetector++ ) 
 	{
 	  TrackerDataImpl* hits = dynamic_cast<TrackerDataImpl*> ( _unmappedCollectionVec->getElementAt(idetector) );
 	  SparsePixelType type  = static_cast<SparsePixelType> ( static_cast<int> ( cellDecoder(hits)["sparsePixelType"] ));
@@ -641,6 +876,19 @@ void EUTelProcessorMapping::fillHistos (LCEvent * evt)
 	    int hitPixelsInEvent = hitData->size();
 	    std::vector<EUTelGeometricPixel> hitPixelVec;
 	    EUTelGenericSparsePixel* genericPixel = new EUTelGenericSparsePixel;
+
+	    /*for( int s=0; s<_selectedEvents[detectorID].size(); s++){
+	      if(evt->getEventNumber()== _selectedEvents[detectorID].at(s)){ selected=true; 
+		_foundSelectedEvents[detectorID] += 1; break; }
+	      }*/
+	    
+	    	//fill the event multiplicity here
+	    std::string tempHistoName;
+	    AIDA::IHistogram1D * histo = dynamic_cast<AIDA::IHistogram1D*> ( _eventMultiplicityHistos[detectorID] );
+	    if ( histo ) { histo->fill( hitPixelsInEvent ); }
+
+	    if(hitPixelsInEvent>100){ selected=true; 
+		_foundSelectedEvents[detectorID] += 1; }
 	    
 	    //This for-loop loads all the hits of the given event and detector plane and stores them as GeometricPixels
 	    for(int i = 0; i < hitPixelsInEvent; ++i )
@@ -655,7 +903,228 @@ void EUTelProcessorMapping::fillHistos (LCEvent * evt)
 		streamlog_out ( DEBUG2 ) << "unmapped hits_" <<i<<" : "<< xPos<< ", "<<yPos<<std::endl;
 		
 		//Do all the plots
-		(dynamic_cast<AIDA::IHistogram2D*> (_unmappedHistos[detectorID]))->fill(static_cast<double >(xPos), static_cast<double >(yPos), 1.);
+		(dynamic_cast<AIDA::IHistogram2D*> (_unmappedHistos[detectorID]))->fill(static_cast<double >(xPos), static_cast<double >(yPos), 1.);		
+		if(_doLargeClusterMaps && selected){
+		  (dynamic_cast<AIDA::IHistogram2D*> (_unmappedSelectedEventsHistos[detectorID]))->fill(static_cast<double >(xPos), static_cast<double >(yPos), 1.); }
+	      }
+		delete genericPixel;
+	  }
+	  else 
+	    {
+	      streamlog_out ( ERROR4 ) <<  "Unknown pixel type:" << type <<std::endl;
+	      throw UnknownDataTypeException("Pixel type unknown");
+	    }	
+	}
+    }
+  catch (lcio::DataNotAvailableException& e) 
+    {
+      return;
+    }
+  
+  try 
+    { //MAPPED Plots
+      LCCollectionVec* _mappedCollectionVec = dynamic_cast<LCCollectionVec*>  (evt->getCollection(_mappedCollectionName));
+      CellIDDecoder<TrackerDataImpl > cellDecoder(_mappedCollectionVec);
+      
+      std::map<int, int> eventCounterMap;
+      
+	for ( unsigned int idetector = 0 ; idetector < _DUTid.size(); idetector++ ) 
+	{
+	  TrackerDataImpl* hits = dynamic_cast<TrackerDataImpl*> ( _mappedCollectionVec->getElementAt(idetector) );
+	  SparsePixelType type  = static_cast<SparsePixelType> ( static_cast<int> ( cellDecoder(hits)["sparsePixelType"] ));
+	  int detectorID = static_cast<int>( cellDecoder(hits)["sensorID"] );
+	  	  
+	  if( type == kEUTelGenericSparsePixel ) {
+
+	    //if this key doesn't exist yet it will be value initialized, this is desired, for int this is 0!
+	    eventCounterMap[detectorID]++;
+	    
+	    //if this is an excluded sensor go to the next element
+	    bool foundexcludedsensor = false;
+	    for(size_t i = 0; i < _ExcludedPlanes.size(); ++i)
+	      {
+		if(_ExcludedPlanes[i] == detectorID)
+		  {
+		    foundexcludedsensor = true;
+		    break;
+		  }
+	      }
+	    if(foundexcludedsensor){ continue; }
+	    // now prepare the EUTelescope interface to sparsified data.
+	    std::auto_ptr<EUTelTrackerDataInterfacerImpl<EUTelGenericSparsePixel > > hitData( new EUTelTrackerDataInterfacerImpl<EUTelGenericSparsePixel> ( hits ) );
+	    streamlog_out ( DEBUG2 ) << "Processing hits for mapping on detector " << detectorID << " with " << hitData->size() << " pixels " << std::endl;
+	    
+	    int hitPixelsInEvent = hitData->size();
+	    EUTelGenericSparsePixel* genericPixel = new EUTelGenericSparsePixel;
+
+	    //bool selected=false;
+	    /*for( int s=0; s<_selectedEvents[detectorID].size(); s++){
+	      if(evt->getEventNumber()== _selectedEvents[detectorID].at(s)){ selected=true; 
+		_foundSelectedEvents[detectorID] += 1; break; }
+	      }*/
+	    //if(hitPixelsInEvent>100){ selected=true; [detectorID] += 1; }
+	    
+	    
+	    //This for-loop loads all the hits of the given event and detector plane and stores them as GeometricPixels
+	    for(int i = 0; i < hitPixelsInEvent; ++i )
+	      {
+		//Load the information of the hit pixel into genericPixel
+		hitData->getSparsePixelAt( i, genericPixel );
+		
+		// get the cluster size in X and Y separately and plot it:
+		int xPos= genericPixel->getXCoord();
+		int yPos= genericPixel->getYCoord();
+		
+		streamlog_out ( DEBUG2 ) << "mapped hits_" <<i<<" : "<< xPos<< ", "<<yPos<<std::endl;
+		//Do all the plots
+		(dynamic_cast<AIDA::IHistogram2D*> (_mappedHistos[detectorID]))->fill(static_cast<double >(xPos), static_cast<double >(yPos), 1.);
+		if(_doLargeClusterMaps && selected){
+		  (dynamic_cast<AIDA::IHistogram2D*> (_mappedSelectedEventsHistos[detectorID]))->fill(static_cast<double >(xPos), static_cast<double >(yPos), 1.); }
+	      }
+		delete genericPixel;
+	  }
+	  else 
+	    {
+	      streamlog_out ( ERROR4 ) <<  "Unknown pixel type:" << type <<std::endl;
+	      throw UnknownDataTypeException("Pixel type unknown");
+	    }	
+	}
+
+    }
+  catch (lcio::DataNotAvailableException& e) 
+    {
+      return;
+    }
+  
+
+  if(_doMaskedOutPlots){ 
+  try 
+    { //MASKEDOUT Plots
+      LCCollectionVec* _maskedOutCollectionVec = dynamic_cast<LCCollectionVec*>  (evt->getCollection(_maskedOutCollectionName));
+      CellIDDecoder<TrackerDataImpl > cellDecoder(_maskedOutCollectionVec);
+      
+      std::map<int, int> eventCounterMap;
+      
+	for ( unsigned int idetector = 0 ; idetector < _DUTid.size(); idetector++ ) 
+	{
+	  TrackerDataImpl* hits = dynamic_cast<TrackerDataImpl*> ( _maskedOutCollectionVec->getElementAt(idetector) );
+	  SparsePixelType type  = static_cast<SparsePixelType> ( static_cast<int> ( cellDecoder(hits)["sparsePixelType"] ));
+	  int detectorID = static_cast<int>( cellDecoder(hits)["sensorID"] );
+	  	  
+	  if( type == kEUTelGenericSparsePixel ) {
+
+	    //if this key doesn't exist yet it will be value initialized, this is desired, for int this is 0!
+	    eventCounterMap[detectorID]++;
+	    
+	    //if this is an excluded sensor go to the next element
+	    bool foundexcludedsensor = false;
+	    for(size_t i = 0; i < _ExcludedPlanes.size(); ++i)
+	      {
+		if(_ExcludedPlanes[i] == detectorID)
+		  {
+		    foundexcludedsensor = true;
+		    break;
+		  }
+	      }
+	    if(foundexcludedsensor){ continue; }
+	    // now prepare the EUTelescope interface to sparsified data.
+	    std::auto_ptr<EUTelTrackerDataInterfacerImpl<EUTelGenericSparsePixel > > hitData( new EUTelTrackerDataInterfacerImpl<EUTelGenericSparsePixel> ( hits ) );
+	    streamlog_out ( DEBUG2 ) << "Processing hits for mapping on detector " << detectorID << " with " << hitData->size() << " pixels " << std::endl;
+	    
+	    int hitPixelsInEvent = hitData->size();
+	    EUTelGenericSparsePixel* genericPixel = new EUTelGenericSparsePixel;
+
+	    //bool selected=false;
+	    /*for( int s=0; s<_selectedEvents[detectorID].size(); s++){
+	      if(evt->getEventNumber()== _selectedEvents[detectorID].at(s)){ selected=true; 
+		_foundSelectedEvents[detectorID] += 1; break; }
+	      }*/
+	    //if(hitPixelsInEvent>100){ selected=true; [detectorID] += 1; }
+	    
+	    
+	    //This for-loop loads all the hits of the given event and detector plane and stores them as GeometricPixels
+	    for(int i = 0; i < hitPixelsInEvent; ++i )
+	      {
+		//Load the information of the hit pixel into genericPixel
+		hitData->getSparsePixelAt( i, genericPixel );
+		
+		// get the cluster size in X and Y separately and plot it:
+		int xPos= genericPixel->getXCoord();
+		int yPos= genericPixel->getYCoord();
+		
+		streamlog_out ( DEBUG2 ) << "maskedout hits_" <<i<<" : "<< xPos<< ", "<<yPos<<std::endl;
+		//Do all the plots
+		_foundMaskedOutPixels[detectorID] += 1;
+		(dynamic_cast<AIDA::IHistogram2D*> (_maskedOutHistos[detectorID]))->fill(static_cast<double >(xPos), static_cast<double >(yPos), 1.);
+		(dynamic_cast<AIDA::IHistogram1D*> (_maskedOutSpectrumHistos[detectorID]))->fill(static_cast<double >(genericPixel->getSignal()));
+		if(_doLargeClusterMaps && selected){
+		  (dynamic_cast<AIDA::IHistogram2D*> (_maskedOutSelectedEventsHistos[detectorID]))->fill(static_cast<double >(xPos), static_cast<double >(yPos), 1.); }
+	      }
+		delete genericPixel;
+	  }
+	  else 
+	    {
+	      streamlog_out ( ERROR4 ) <<  "Unknown pixel type:" << type <<std::endl;
+	      throw UnknownDataTypeException("Pixel type unknown");
+	    }	
+	}
+
+    }
+  catch (lcio::DataNotAvailableException& e) 
+    {
+      return;
+    }
+  }
+
+  try 
+    { //MASKED Plots
+      LCCollectionVec* _maskedCollectionVec = dynamic_cast<LCCollectionVec*>  (evt->getCollection(_maskedCollectionName));
+      CellIDDecoder<TrackerDataImpl > cellDecoder(_maskedCollectionVec);
+      
+      std::map<int, int> eventCounterMap;
+      
+	for ( unsigned int idetector = 0 ; idetector < _DUTid.size(); idetector++ ) 
+	{
+	  TrackerDataImpl* hits = dynamic_cast<TrackerDataImpl*> ( _maskedCollectionVec->getElementAt(idetector) );
+	  SparsePixelType type  = static_cast<SparsePixelType> ( static_cast<int> ( cellDecoder(hits)["sparsePixelType"] ));
+	  int detectorID = static_cast<int>( cellDecoder(hits)["sensorID"] );
+	  	  
+	  if( type == kEUTelGenericSparsePixel ) {
+
+	    //if this key doesn't exist yet it will be value initialized, this is desired, for int this is 0!
+	    eventCounterMap[detectorID]++;
+	    
+	    //if this is an excluded sensor go to the next element
+	    bool foundexcludedsensor = false;
+	    for(size_t i = 0; i < _ExcludedPlanes.size(); ++i)
+	      {
+		if(_ExcludedPlanes[i] == detectorID)
+		  {
+		    foundexcludedsensor = true;
+		    break;
+		  }
+	      }
+	    if(foundexcludedsensor){ continue; }
+	    // now prepare the EUTelescope interface to sparsified data.
+	    std::auto_ptr<EUTelTrackerDataInterfacerImpl<EUTelGenericSparsePixel > > hitData( new EUTelTrackerDataInterfacerImpl<EUTelGenericSparsePixel> ( hits ) );
+	    streamlog_out ( DEBUG2 ) << "Processing hits for masking on detector " << detectorID << " with " << hitData->size() << " pixels " << std::endl;
+	    
+	    int hitPixelsInEvent = hitData->size();
+	    EUTelGenericSparsePixel* genericPixel = new EUTelGenericSparsePixel;
+	    
+	    //This for-loop loads all the hits of the given event and detector plane and stores them as GeometricPixels
+	    for(int i = 0; i < hitPixelsInEvent; ++i )
+	      {
+		//Load the information of the hit pixel into genericPixel
+		hitData->getSparsePixelAt( i, genericPixel );
+		
+		// get the cluster size in X and Y separately and plot it:
+		int xPos= genericPixel->getXCoord();
+		int yPos= genericPixel->getYCoord();
+		
+		streamlog_out ( DEBUG2 ) << "mapped hits_" <<i<<" : "<< xPos<< ", "<<yPos<<std::endl;
+		//Do all the plots
+		(dynamic_cast<AIDA::IHistogram2D*> (_maskedHistos[detectorID]))->fill(static_cast<double >(xPos), static_cast<double >(yPos), 1.);
 	      }
 		delete genericPixel;
 	  }
@@ -695,16 +1164,23 @@ void EUTelProcessorMapping::bookHistos() {
   }
 
   // define our histogram names
+  std::string _hitNumberHistoName             = "hitNumber";
   std::string _unmappedHistoName             = "ummappedHitMap";
+  std::string _unmappedSelectedEventsHistoName             = "ummappedSelectedEventsHitMap";
+  std::string _maskedHistoName         = "maskedHitMap";
   std::string _mappedHistoName         = "mappedHitMap";
+  std::string _maskedOutHistoName         = "maskedOutHitMap";
+  std::string _mappedSelectedEventsHistoName         = "mappedSelectedEventsHitMap";
+  std::string _maskedOutSelectedEventsHistoName         = "maskedOutSelectedEventsHitMap";
+  std::string _maskedOutSpectrumHistoName         = "maskedOutSpectrum";
   std::string _eventMultiplicityHistoName  = "eventMultiplicity";
 
   std::string tempHistoName;
   std::string basePath;
 
-	for (size_t iDetector = 0; iDetector < _sensorIDVec.size(); iDetector++) 
+	for (size_t iDetector = 0; iDetector < _DUTid.size(); iDetector++) 
 	{
-		int sensorID = _sensorIDVec.at( iDetector );
+		int sensorID = _DUTid.at( iDetector );
         geo::EUTelGenericPixGeoDescr* geoDescr =  ( geo::gGeometry().getPixGeoDescr( sensorID ) );
         
         int nRow=-1, nCol=-1;
@@ -722,7 +1198,7 @@ void EUTelProcessorMapping::bookHistos() {
 
 		//now that we know which is the sensorID, we can ask which are the minX, minY, maxX and maxY.
 		int minX, minY, maxX, maxY;
-        minX = minY = 0; maxX = nCol-1; maxY = nRow-1;
+		minX = minY = 0; maxX = nCol-1; maxY = nRow-1;
 		int uMinX, uMinY, uMaxX, uMaxY;
 		uMinX = uMinY = uMaxX = uMaxY = 0;
 		 
@@ -732,7 +1208,7 @@ void EUTelProcessorMapping::bookHistos() {
 		AIDAProcessor::tree(this)->mkdir(basePath.c_str());
 		basePath.append("/");
         
-        streamlog_out ( MESSAGE4 ) <<  "unmapped sensor "<<sensorID <<"... uMaxX: "<<uMaxX<<", uMaxY: "<<uMaxY<< std::endl;
+		streamlog_out ( MESSAGE4 ) <<  "unmapped sensor "<<sensorID <<"... uMaxX: "<<uMaxX<<", uMaxY: "<<uMaxY<< std::endl;
 		tempHistoName = _unmappedHistoName + "_d" + to_string( sensorID );
 		int     xBin = uMaxX - uMinX + 1;
 		double  xMin = static_cast<double >( uMinX ) - 0.5 ;
@@ -744,24 +1220,65 @@ void EUTelProcessorMapping::bookHistos() {
 		AIDA::IHistogram2D * unmappedHisto = AIDAProcessor::histogramFactory(this)->createHistogram2D( (basePath + tempHistoName).c_str(), xBin, xMin, xMax,yBin, yMin, yMax);
 		_unmappedHistos.insert(std::make_pair(sensorID, unmappedHisto));
 		unmappedHisto->setTitle("UNMAPPED Pixel Index Hit Map;X Index [#];Y Index [#];Count [#]");
+
+		if(_doLargeClusterMaps){
+		  tempHistoName = _unmappedSelectedEventsHistoName + "_d" + to_string( sensorID );
+		  //streamlog_out ( MESSAGE4 ) <<  "Sensor "<<sensorID <<"... xMax: "<<xMax<<", yMax: "<<yMax<< std::endl;
+		  AIDA::IHistogram2D * unmappedSelectedEventsHisto = AIDAProcessor::histogramFactory(this)->createHistogram2D( (basePath + tempHistoName).c_str(), xBin, xMin, xMax,yBin, yMin, yMax);
+		  _unmappedSelectedEventsHistos.insert(std::make_pair(sensorID, unmappedSelectedEventsHisto));
+		  unmappedSelectedEventsHisto->setTitle("UNMAPPED Pixel Index Hit Map for Selected Events ;X Index [#];Y Index [#];Count [#]");
+		}
         
-        streamlog_out ( MESSAGE4 ) <<  "mapped sensor "<<sensorID <<"... maxX: "<<maxX<<", maxY: "<<maxY<< std::endl;
+		if(_maskChannels){
+		  streamlog_out ( MESSAGE4 ) <<  "masked sensor "<<sensorID <<"... uMaxX: "<<uMaxX<<", uMaxY: "<<uMaxY<< std::endl;
+		  tempHistoName = _maskedHistoName + "_d" + to_string( sensorID );
+		  AIDA::IHistogram2D * maskedHisto = AIDAProcessor::histogramFactory(this)->createHistogram2D( (basePath + tempHistoName).c_str(), xBin, xMin, xMax,yBin, yMin, yMax);
+		  _maskedHistos.insert(std::make_pair(sensorID, maskedHisto));
+		  maskedHisto->setTitle("MASKED Pixel Index Hit Map;X Index [#];Y Index [#];Count [#]");
+		}
+        
+		if(_doMaskedOutPlots){
+		  streamlog_out ( MESSAGE4 ) <<  "unused channel on sensor "<<sensorID <<"... uMaxX: "<<uMaxX<<", uMaxY: "<<uMaxY<< std::endl;
+		  tempHistoName = _maskedOutHistoName + "_d" + to_string( sensorID );
+		  AIDA::IHistogram2D * maskedOutHisto = AIDAProcessor::histogramFactory(this)->createHistogram2D( (basePath + tempHistoName).c_str(), xBin, xMin, xMax,yBin, yMin, yMax);
+		  _maskedOutHistos.insert(std::make_pair(sensorID, maskedOutHisto));
+		  maskedOutHisto->setTitle("MASKEDOUT Pixel Index Hit Map;X Index [#];Y Index [#];Count [#]");
+
+		  if(_doLargeClusterMaps){
+		    
+		    tempHistoName = _maskedOutSelectedEventsHistoName + "_d" + to_string( sensorID );
+		    //streamlog_out ( MESSAGE4 ) <<  "Sensor "<<sensorID <<"... xMax: "<<xMax<<", yMax: "<<yMax<< std::endl;
+		    AIDA::IHistogram2D * maskedOutSelectedEventsHisto = AIDAProcessor::histogramFactory(this)->createHistogram2D( (basePath + tempHistoName).c_str(), xBin, xMin, xMax,yBin, yMin, yMax);
+		    _maskedOutSelectedEventsHistos.insert(std::make_pair(sensorID, maskedOutSelectedEventsHisto));
+		    maskedOutSelectedEventsHisto->setTitle("MASKEDOUT Pixel Index Hit Map for Selected Events ;X Index [#];Y Index [#];Count [#]");
+		  }
+		}
+
+		streamlog_out ( MESSAGE4 ) <<  "mapped sensor "<<sensorID <<"... maxX: "<<maxX<<", maxY: "<<maxY<< std::endl;
 		tempHistoName = _mappedHistoName + "_d" + to_string( sensorID );
 		xBin = maxX - minX + 1;
 		xMin = static_cast<double >( minX ) - 0.5 ;
 		xMax = static_cast<double >( maxX ) + 0.5;
 		yBin = maxY - minY + 1;
 		yMin = static_cast<double >( minY ) - 0.5;
-        yMax = static_cast<double >( maxY ) + 0.5;
+		yMax = static_cast<double >( maxY ) + 0.5;
         //streamlog_out ( MESSAGE4 ) <<  "Sensor "<<sensorID <<"... xMax: "<<xMax<<", yMax: "<<yMax<< std::endl;
 		AIDA::IHistogram2D * mappedHisto = AIDAProcessor::histogramFactory(this)->createHistogram2D( (basePath + tempHistoName).c_str(), xBin, xMin, xMax,yBin, yMin, yMax);
 		_mappedHistos.insert(std::make_pair(sensorID, mappedHisto));
 		mappedHisto->setTitle("MAPPED Pixel Index Hit Map;X Index [#];Y Index [#];Count [#]");
 
+		if(_doLargeClusterMaps){
+		  tempHistoName = _mappedSelectedEventsHistoName + "_d" + to_string( sensorID );
+		  //streamlog_out ( MESSAGE4 ) <<  "Sensor "<<sensorID <<"... xMax: "<<xMax<<", yMax: "<<yMax<< std::endl;
+		  AIDA::IHistogram2D * mappedSelectedEventsHisto = AIDAProcessor::histogramFactory(this)->createHistogram2D( (basePath + tempHistoName).c_str(), xBin, xMin, xMax,yBin, yMin, yMax);
+		  _mappedSelectedEventsHistos.insert(std::make_pair(sensorID, mappedSelectedEventsHisto));
+		  mappedSelectedEventsHisto->setTitle("MAPPED Pixel Index Hit Map for Selected Events;X Index [#];Y Index [#];Count [#]");
+		}
+
 		tempHistoName = _eventMultiplicityHistoName + "_d" + to_string( sensorID );
-		int     eventMultiNBin  = 15;
-		double  eventMultiMin   =  -0.5;
-		double  eventMultiMax   = 14.5;
+		int     eventMultiNBin  = 500;
+		double  eventMultiMin   = 0;
+		double  eventMultiMax   = 500;
 		std::string  eventMultiTitle = "Event multiplicity";
 		if ( isHistoManagerAvailable ) {
 		  histoInfo = histoMgr->getHistogramInfo(  _eventMultiplicityHistoName );
@@ -779,8 +1296,21 @@ void EUTelProcessorMapping::bookHistos() {
 		_eventMultiplicityHistos.insert( std::make_pair(sensorID, eventMultiHisto) );
 		eventMultiHisto->setTitle( eventMultiTitle.c_str() );
 
+		if(_doMaskedOutPlots){// Spectrum of pixel charge of MASKEDOUT pixels
+		  tempHistoName = _maskedOutSpectrumHistoName + "_d" + to_string( sensorID );
+		  int    clusterNBin  = 61;
+		  double clusterMin   = -0.5;
+		  double clusterMax   = 60.5;
+		  std::string clusterTitle = "Spectrum of pixel charge of MASKEDOUT pixels (in Detector specific Charge Unit);Charge;Count [#]";
+		AIDA::IHistogram1D * maskedOutSpectrumHisto =
+		  AIDAProcessor::histogramFactory(this)->createHistogram1D( (basePath + tempHistoName).c_str(),
+		                                                            clusterNBin,clusterMin,clusterMax);
+		_maskedOutSpectrumHistos.insert( std::make_pair(sensorID, maskedOutSpectrumHisto) );
+		maskedOutSpectrumHisto->setTitle( eventMultiTitle.c_str() );
+		}
+
 	}
+
   streamlog_out ( DEBUG5 )  << "end of Booking histograms " << std::endl; 
 }
 #endif
-

@@ -34,7 +34,7 @@ std::vector<int> EUTelExcludedPlanes::getRelativeComplementSet(std::vector<int> 
     {
         int currentSensorID = *it;
         std::vector<int>::const_iterator pos = std::find(planesToExclude.begin(), planesToExclude.end(), currentSensorID);
-        if(pos == planesToExclude.end() and currentSensorID <= 99){ ///Not all end statements are create equal! :-)
+        if(pos == planesToExclude.end() and currentSensorID <= 99 or currentSensorID ==271){ ///Not all end statements are create equal! :-)
             resultVec.push_back(currentSensorID);
         }
     }
@@ -48,8 +48,8 @@ std::vector<int> EUTelExcludedPlanes::getSensorsNotDeadMaterial()
 
     for(std::vector<int>::const_iterator it = sensorIDsVec.begin(); it != sensorIDsVec.end(); it++){
         int currentSensorID = *it;
-        if(currentSensorID <= 99){ 
-                resultVec.push_back(currentSensorID);
+        if(currentSensorID <= 99 or currentSensorID == 271){ 
+            resultVec.push_back(currentSensorID);
         }
     }
 	return resultVec;
