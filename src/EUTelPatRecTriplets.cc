@@ -10,7 +10,7 @@ namespace eutelescope {
 EUTelPatRecTriplets::EUTelPatRecTriplets(AIDA::IHistogram1D * DoubletXseperationHistoRight, AIDA::IHistogram1D * DoubletYseperationHistoRight, AIDA::IHistogram1D * DoubletXseperationHistoLeft,
 					   AIDA::IHistogram1D * DoubletYseperationHistoLeft, AIDA::IHistogram1D * TripletXseperationHistoRight, AIDA::IHistogram1D * TripletYseperationHistoRight,
 					   AIDA::IHistogram1D * TripletXseperationHistoLeft, AIDA::IHistogram1D * TripletYseperationHistoLeft, AIDA::IHistogram1D * TripletDistCutXHisto,
-					   AIDA::IHistogram1D * TripletDistCutYHisto):  
+					   AIDA::IHistogram1D * TripletDistCutYHisto, AIDA::IHistogram1D * TripletSlopeHistoX, AIDA::IHistogram1D * TripletSlopeHistoY, AIDA::IHistogram1D * DUTWindowHisto ):  
 _eventNumber(0),
 _totalNumberOfHits(0),
 _numberTripletsLeft(0),
@@ -20,6 +20,7 @@ _beamE(-1.),
 _hitNum(6),
 _mode(1),
 _numberOfTracksTotal(0),
+_numberOfTracksDUTTotal(0),
 _DoubletXseperationHistoRight(DoubletXseperationHistoRight),
 _DoubletYseperationHistoRight(DoubletYseperationHistoRight),
 _DoubletXseperationHistoLeft(DoubletXseperationHistoLeft),

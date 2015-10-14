@@ -79,16 +79,19 @@ void EUTelProcessorPatRecTriplets::init(){
 
 	try{
 
-	  _DoubletXseperationHistoRight = marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("Doublet X Seperation, Right Arm", 400, -0.5, 0.5);
-	  _DoubletYseperationHistoRight =marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("Doublet Y Seperation, Right Arm", 400, -0.5, 0.5);
-	  _DoubletXseperationHistoLeft =marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("Doublet X Seperation, Left Arm", 400, -0.5, 0.5);
-	  _DoubletYseperationHistoLeft =marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("Doublet Y Seperation, Left Arm", 400, -0.5, 0.5);
-	  _TripletXseperationHistoRight =marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("Triplet X Seperation, Right Arm", 400, -0.5, 0.5);
-	  _TripletYseperationHistoRight =marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("Triplet Y Seperation, Right Arm", 400, -0.5, 0.5);
-	  _TripletXseperationHistoLeft =marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("Triplet X Seperation, Left Arm", 400, -0.5, 0.5);
-	  _TripletYseperationHistoLeft =marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("Triplet Y Seperation, Left Arm", 400, -0.5, 0.5);
-	  _TripletDistCutXHisto = marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("Triplet Dist Cut X", 400, -1,1);
-	  _TripletDistCutYHisto = marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("Triplet Dist Cut Y", 400, -1,1);
+	  _DoubletXseperationHistoRight = marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("DoubletDist X  (Down stream)", 400, -0.5, 0.5);
+	  _DoubletYseperationHistoRight =marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("DoubletDist Y  (Down stream)", 400, -0.5, 0.5);
+	  _DoubletXseperationHistoLeft =marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("DoubletDist X  (Up stream)", 400, -0.5, 0.5);
+	  _DoubletYseperationHistoLeft =marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("DoubletDist  Y  (Up stream)", 400, -0.5, 0.5);
+	  _TripletXseperationHistoRight =marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("DoubletCenDist X , (Down stream)", 400, -0.5, 0.5);
+	  _TripletYseperationHistoRight =marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("DoubletCenDist Y , (Down stream)", 400, -0.5, 0.5);
+	  _TripletXseperationHistoLeft =marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("DoubletCenDist X (Up stream)", 400, -0.5, 0.5);
+	  _TripletYseperationHistoLeft =marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("DoubletCenDist Y (Up stream)", 400, -0.5, 0.5);
+	  _TripletDistCutXHisto = marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("TripletConnectDist X", 400, -1,1);
+	  _TripletDistCutYHisto = marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("TripletConnectDist Y", 400, -1,1);
+	  _TripletSlopeHistoX = marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("TripletSlopeX", 400, -0.01,0.01);
+	  _TripletSlopeHistoY = marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("TripletSlopeY", 400, -0.01,0.01);
+	  _DUTWindowHisto = marlin::AIDAProcessor::histogramFactory(this)->createHistogram1D("DUTWindow", 500, 0,5);
 		_nProcessedRuns = 0;
 		_nProcessedEvents = 0;
 		std::string name = EUTELESCOPE::GEOFILENAME;
@@ -103,7 +106,7 @@ void EUTelProcessorPatRecTriplets::init(){
 		_trackFitter = new EUTelPatRecTriplets(_DoubletXseperationHistoRight, _DoubletYseperationHistoRight,_DoubletXseperationHistoLeft,
 					   _DoubletYseperationHistoLeft, _TripletXseperationHistoRight, _TripletYseperationHistoRight,
 					   _TripletXseperationHistoLeft, _TripletYseperationHistoLeft, _TripletDistCutXHisto,
-					   _TripletDistCutYHisto);
+					   _TripletDistCutYHisto,_TripletSlopeHistoX,_TripletSlopeHistoY,_DUTWindowHisto);
         _trackFitter->setMode(_mode);
 		_trackFitter->setNumHits(_minHits);
 		_trackFitter->setDUTCut(_dutDistCut);
